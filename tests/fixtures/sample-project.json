@@ -1,0 +1,106 @@
+{
+  "venues": [
+    { "id": "A", "name": "A 跑道區", "subtitle": "100M / 60M / 接力" },
+    { "id": "B", "name": "B 跳高/壘球", "subtitle": "跳高墊 / 壘球擲遠" },
+    { "id": "S", "name": "台 司令台上", "subtitle": "頒獎典禮 / 播報", "capacity": 40 }
+  ],
+  "dates": [
+    {
+      "id": "d1",
+      "category": "會前賽",
+      "label": "12/14 (一) 立定跳遠",
+      "commandDeckEnabled": false,
+      "generalStaff": { "hosts": "", "recorders": "", "stageControl": "" },
+      "commandSlots": []
+    },
+    {
+      "id": "d2",
+      "category": "運動會正式賽",
+      "label": "12/19 (六) 運動會正式賽",
+      "commandDeckEnabled": true,
+      "generalStaff": { "hosts": "主持甲、主持乙", "recorders": "紀錄甲", "stageControl": "場控甲｜大會總場控" },
+      "commandSlots": [
+        { "id": "cmd-1", "type": "host", "startMin": 540, "endMin": 630, "staff": "主持甲（早班）", "content": "開幕後即時播報" },
+        { "id": "cmd-2", "type": "award", "startMin": 580, "endMin": 620, "staff": "校長", "content": "頒獎", "priority": "high" }
+      ],
+      "theme": "rainy-day-plan"
+    },
+    { "id": "d3", "category": "會前賽", "label": "沒有 generalStaff 與 commandSlots 的日子" }
+  ],
+  "events": [
+    {
+      "id": "ev-1",
+      "dateId": "d2",
+      "venueIds": ["A"],
+      "startMin": 540,
+      "endMin": 610,
+      "checkInOffsetMin": 20,
+      "linkPrev": false,
+      "title": "100M + 60M 徑賽決賽",
+      "color": "amber",
+      "referees": [
+        { "role": "發令", "name": "體育組長" },
+        { "role": "終點判定", "name": "終點裁判團 x8", "phone": "分機 123" }
+      ],
+      "volunteerCount": 4,
+      "volunteerTask": "攝影與終點拉線",
+      "studentCount": 10,
+      "studentTask": "舉道次牌",
+      "equipment": ["起跑架 + 發令槍(起+終)", "計時碼表 + 名次牌 + 紀錄夾"],
+      "laneNote": "第1道紅、第2道黃",
+      "attachments": [
+        { "name": "道次表.png", "type": "image", "dataUrl": "data:image/png;base64,iVBORw0KGgo=" }
+      ],
+      "actualStartMin": 542,
+      "actualEndMin": 615
+    },
+    {
+      "id": "ev-2",
+      "dateId": "d2",
+      "venueIds": ["A", "B", "S"],
+      "startMin": 620,
+      "endMin": 650,
+      "checkInOffsetMin": 10,
+      "linkPrev": true,
+      "title": "跨三個場地的項目 O'Brien \"引號\" ; DROP TABLE events; -- 🏃",
+      "color": "rose",
+      "referees": [],
+      "volunteerCount": 0,
+      "volunteerTask": "",
+      "studentCount": 0,
+      "studentTask": "",
+      "equipment": [],
+      "laneNote": "",
+      "attachments": [],
+      "actualStartMin": null,
+      "actualEndMin": null,
+      "customNote": { "level": 2, "tags": ["雨備", "室內"] }
+    },
+    {
+      "id": "ev-3",
+      "dateId": "d1",
+      "venueIds": ["B"],
+      "startMin": 470,
+      "endMin": 580,
+      "checkInOffsetMin": 20,
+      "linkPrev": false,
+      "title": "從 Firebase 搬來、缺少空陣列與 null 欄位的項目",
+      "color": "purple",
+      "referees": [{ "name": "只有姓名沒有職稱" }],
+      "volunteerCount": 2,
+      "volunteerTask": "協助整隊",
+      "studentCount": 8,
+      "studentTask": "拉皮尺",
+      "equipment": ["立定跳遠墊 x8組"],
+      "laneNote": "分 4 站同時測驗"
+    },
+    {
+      "id": "ev-4",
+      "dateId": "deleted-day",
+      "venueIds": ["Z"],
+      "startMin": 700,
+      "endMin": 730.5,
+      "title": "指向不存在的比賽日與場地"
+    }
+  ]
+}

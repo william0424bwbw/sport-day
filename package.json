@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler d1 migrations apply sport-day-db --local && wrangler dev",
     "deploy": "bash scripts/deploy.sh",
+    "test": "bash scripts/test.sh",
     "db:new": "wrangler d1 migrations create sport-day-db",
     "db:migrate": "wrangler d1 migrations apply sport-day-db --remote",
     "tail": "wrangler tail"

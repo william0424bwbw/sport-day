@@ -1,6 +1,6 @@
 # sport-day 專案說明（給 Claude Code）
 
-小學運動會視覺化賽程排程系統。目前整個前端在單一檔案 `index.html`，正規劃遷移到 Cloudflare Workers + D1，詳細步驟和樣板見 `TODO.md`。
+小學運動會視覺化賽程排程系統，部署在 Cloudflare Workers + D1（https://sport-day.teacherbear.workers.dev）。進度與待辦見 `TODO.md`。目前是測試階段，系統仍在大幅改動。
 
 ## 專案規範（必須遵守）
 - **腳本一律寫成 `.sh`，用 Git Bash 執行**
@@ -14,8 +14,16 @@
 - **機密不進版控**：`.env`、`.dev.vars` 不可以 commit；API Token 和 `ADMIN_TOKEN` 只放在 `.env` 和 GitHub Secrets。
 - 部署和維護都用腳本或 CI，不要指示使用者到 Cloudflare Dashboard 手動上傳。
 
-## 常用指令（遷移完成後）
+## 架構
+- `public/index.html`：整個前端。資料以 D1 為準，localStorage 只當離線快取。
+- `src/worker.js`：API 路由與權限；`src/db.js`：JSON ⇄ 資料表的讀寫。
+- D1 資料表：`venues`、`days`、`command_slots`、`events`、`event_venues`、`event_referees`、`event_equipment`、`event_attachments`，以及 view `v_schedule`、`v_integrity_issues`。
+- API 對前端仍是同一份 JSON（`{ venues, dates, events }`）。資料表沒有對應欄位的屬性會存進 `extra`。
+- **新增欄位時**：新增 migration 加欄位，同時修改 `src/db.js` 的 `WRITE_SQL`（含 `json_remove` 清單）與 `readProject`，再執行測試。
+
+## 常用指令
 - 本機開發：`npm run dev`
+- 測試：`bash scripts/test.sh`（獨立本機資料庫；CI 部署前也會執行）
 - 部署：`bash scripts/deploy.sh`（push 到 `main` 也會由 GitHub Actions 自動部署）
 - 新增 D1 migration：`npm run db:new -- <名稱>`
 - 備份：`bash scripts/backup.sh`

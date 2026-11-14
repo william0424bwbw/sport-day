@@ -1,3 +1,5 @@
+import { readProject, readVersion, validatePayload, writeProject } from './db.js';
+
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -39,15 +41,8 @@ async function handleApi(request, env, url) {
   const [, id, versionOnly] = m;
 
   if (request.method === 'GET') {
-    if (versionOnly) {
-      const row = await env.DB.prepare('SELECT updated_at FROM projects WHERE id = ?')
-        .bind(id).first();
-      return json({ updatedAt: row?.updated_at ?? null });
-    }
-    const row = await env.DB.prepare('SELECT data, updated_at FROM projects WHERE id = ?')
-      .bind(id).first();
-    if (!row) return json(null);
-    return json({ ...JSON.parse(row.data), updatedAt: row.updated_at });
+    if (versionOnly) return json({ updatedAt: await readVersion(env.DB, id) });
+    return json(await readProject(env.DB, id));
   }
 
   if (request.method === 'PUT' && !versionOnly) {
@@ -55,19 +50,10 @@ async function handleApi(request, env, url) {
 
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400); }
-    if (!body || !Array.isArray(body.events)) return json({ error: 'invalid_payload' }, 400);
+    const problem = validatePayload(body);
+    if (problem) return json({ error: 'invalid_payload', message: problem }, 400);
 
-    const updatedAt = Date.now();
-    const data = JSON.stringify({
-      venues: body.venues ?? [],
-      dates: body.dates ?? [],
-      events: body.events,
-    });
-    await env.DB.prepare(
-      `INSERT INTO projects (id, data, updated_at) VALUES (?1, ?2, ?3)
-       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
-    ).bind(id, data, updatedAt).run();
-
+    const updatedAt = await writeProject(env.DB, id, body);
     return json({ ok: true, updatedAt });
   }
 

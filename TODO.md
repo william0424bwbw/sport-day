@@ -94,6 +94,63 @@
 - [ ] 停用舊 Firebase（`sportday-8d61c`）：目前規則是測試模式，任何人都能讀寫。確認大家都改用 Worker 網址後，把 Realtime Database 規則改成 `{".read": false, ".write": false}` 或刪除專案
 - [ ] Tailwind Play CDN、Google Fonts、unpkg 仍是外部服務；若要完全只靠 Cloudflare，可改成建置時產生 CSS，並把字型與圖示放進 `public/`
 
+### H. 資料正規化：把一整串 JSON 拆成資料表
+
+**現況**：`projects` 表每個專案只有一列，`data` 欄位放整份 JSON（約 18 KB）。用 SQL 查不到單一賽程，在 D1 Console 也很難看、很難改。
+
+**原則**
+- **API 不變**：`GET`/`PUT /api/projects/:id` 的 JSON 格式完全不變，只改 Worker 讀寫資料庫的方式，**前端不用改**。
+- **不遺失資料**：前端以後新增欄位、但資料表還沒有對應欄位時，先放進 `extra`（JSON）欄位，不會被丟掉。
+- **可以回復**：搬移前先備份；測試階段經確認無誤後，已直接刪除舊的 `projects.data`（`migrations/0004`）。
+- **全部自動化**：用 migration 搬資料，由 `deploy.sh` 或 CI 自動套用，不手動操作 Console。
+
+**資料表設計**（每張表都用 `project_id` 區分不同場運動會）
+
+| 資料表 | 一列代表 | 主要欄位 | 對應目前 JSON |
+|---|---|---|---|
+| `projects` | 一場運動會 | `id`, `updated_at` | 專案本身 |
+| `venues` | 場地 | `id`, `sort_order`, `name`, `subtitle` | `venues[]` |
+| `days` | 比賽日 | `id`, `sort_order`, `label`, `category`, `command_deck_enabled`, `staff_hosts`, `staff_recorders`, `staff_stage_control` | `dates[]` 與 `generalStaff` |
+| `command_slots` | 司令台播報時段 | `id`, `day_id`, `type`, `start_min`, `end_min`, `staff`, `content` | `dates[].commandSlots[]` |
+| `events` | 一個賽程方塊 | `id`, `day_id`, `title`, `color`, `start_min`, `end_min`, `check_in_offset_min`, `link_prev`, `volunteer_count`, `volunteer_task`, `student_count`, `student_task`, `lane_note`, `actual_start_min`, `actual_end_min`, `extra` | `events[]` |
+| `event_venues` | 賽程使用的場地（一個賽程可跨多場地） | `event_id`, `venue_id`, `sort_order` | `events[].venueIds[]` |
+| `event_referees` | 裁判／工作分配 | `event_id`, `sort_order`, `role`, `name` | `events[].referees[]` |
+| `event_equipment` | 器材 | `event_id`, `sort_order`, `item` | `events[].equipment[]` |
+| `event_attachments` | 道次表附件 | `event_id`, `sort_order`, `name`, `type`, `r2_key` | `events[].attachments[]`（之後改存 R2） |
+
+- 主鍵一律是 `(project_id, id)`，因為 `A`、`12-19` 這類代號在不同專案會重複。
+- 子表用外鍵加 `ON DELETE CASCADE` 指向 `events` 或 `days`。`event_venues.venue_id` **不加外鍵**，避免前端刪除場地時整次儲存失敗；改用檢查查詢找出孤兒資料。
+- 時間維持「從 0:00 起算的分鐘數」，和前端一致。另外建 view `v_schedule`，把時間轉成 `HH:MM`，並帶出場地名稱，方便在 Console 閱讀。
+- 不做成資料表：`currentDateId`、`simTimeMin` 屬於每台裝置自己的畫面狀態，留在 localStorage。
+
+**寫入方式**
+- `PUT` 時用一個 D1 `batch`（交易）：刪除這個專案的子資料，再整批寫入。任何一步失敗都會整批回復，不會寫到一半。
+- 每張表只用 **1 條 SQL**：`INSERT ... SELECT ... FROM json_each(?)`，把整個陣列當成一個參數傳入。這樣不會碰到 D1「每條 SQL 最多 100 個參數」和免費方案「每次請求最多 50 條查詢」的限制。
+- `GET` 時用幾條 `SELECT` 讀出各表，在 Worker 組回原本的 JSON 格式。
+
+**步驟**
+- [x] H1. `migrations/0002_normalized_tables.sql`：建立上面的資料表、索引、view `v_schedule`、`v_integrity_issues`
+- [x] H2. `migrations/0003_copy_json_to_tables.sql`：純 SQL 用 `json_each` 把現有的 `projects.data` 拆到各表（部署時自動執行）
+- [x] H3. Worker 改成從資料表讀寫（`src/db.js`）
+- [x] H4. 加入自動測試，放進 repo，用 `bash scripts/test.sh` 執行：
+  - **來回測試**：用目前正式資料 `PUT` 進去再 `GET` 出來，必須和原本 JSON 完全相同
+  - **端對端測試**：前面用過的無頭 Chrome 測試，移進 `tests/`
+  - CI 部署前先跑測試，失敗就不部署
+- [x] H5. 部署前先執行 `bash scripts/backup.sh`；部署後比對正式環境的 `GET` 結果和搬移前一致
+- [x] H6. `migrations/0004_drop_projects_data.sql` 移除 `projects.data`（測試階段，使用者決定直接刪除）
+- [ ] H7.（之後）附件改存 R2：新增 `/api/files` 上傳 API，`event_attachments` 只存 `r2_key`
+- [ ] H8.（之後，選做）細部 API，例如 `PATCH /api/projects/:id/events/:eventId`，多位管理者同時編輯時不會互相覆蓋；以及 `event_changes` 異動紀錄表，可以查「誰在何時改了什麼」
+
+**之後可以直接用 SQL 維護**（範例）
+```bash
+# 列出 12/19 所有賽程
+npx wrangler d1 execute sport-day-db --remote --command \
+  "SELECT start_hhmm, end_hhmm, venue_names, title FROM v_schedule WHERE day_id='12-19' ORDER BY start_min"
+# 查某位老師負責哪些項目
+npx wrangler d1 execute sport-day-db --remote --command \
+  "SELECT e.title, r.role FROM event_referees r JOIN events e USING(project_id) WHERE r.event_id=e.id AND r.name LIKE '%林老師%'"
+```
+
 ---
 
 ## 2. 樣板
