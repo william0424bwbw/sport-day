@@ -389,13 +389,11 @@ curl -fsS -X PUT "$WORKER_URL/api/projects/$PROJECT" \
 echo
 ```
 
-
+### `.github/workflows/deploy.yml`（已改為只能手動觸發，最新版本以 repo 內檔案為準）
 ```yaml
 name: Deploy to Cloudflare
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
