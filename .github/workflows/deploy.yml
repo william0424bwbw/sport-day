@@ -22,6 +22,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       # 測試失敗就不部署（本機獨立資料庫，不會碰到正式環境）
       - name: Test
         run: bash scripts/test.sh

@@ -1,19 +1,29 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sport-day",
-  "main": "src/worker.js",
+  "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
-    "directory": "./public",
-    "binding": "ASSETS"
+    // 前端由 Vite 建置到 dist/（npm run build）
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // 單頁應用：找不到的路徑回傳 index.html，由前端路由處理
+    "not_found_handling": "single-page-application",
+    // /api/* 一律先交給 Worker，不會被 SPA fallback 攔截
+    "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "sport-day-db",
-      "database_id": "7b624344-a166-4c9f-ae5b-383f3690cd03", // bootstrap.sh 會自動填入
+      "database_id": "7b624344-a166-4c9f-ae5b-383f3690cd03",
       "migrations_dir": "migrations"
     }
   ],
+  // 每場運動會一個 Durable Object，負責 WebSocket 即時推送（§J）
+  "durable_objects": {
+    "bindings": [{ "name": "PROJECT_ROOM", "class_name": "ProjectRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectRoom"] }],
   "observability": { "enabled": true }
 }

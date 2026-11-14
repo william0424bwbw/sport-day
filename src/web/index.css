@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/* 系統字型：不載入網路字型，手機開啟更快、不怕外部網站被擋 */
+@theme {
+  --font-sans:
+    system-ui, -apple-system, 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', 'Segoe UI', Roboto,
+    sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* 檢錄緩衝區斜線（與舊版相同） */
+.checkin-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgb(148 163 184 / 0.22),
+    rgb(148 163 184 / 0.22) 6px,
+    rgb(241 245 249 / 0.94) 6px,
+    rgb(241 245 249 / 0.94) 12px
+  );
+}
+.checkin-stripes-warn {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgb(245 158 11 / 0.28),
+    rgb(245 158 11 / 0.28) 6px,
+    rgb(255 251 235 / 0.95) 6px,
+    rgb(255 251 235 / 0.95) 12px
+  );
+}
+
+/* 安全區域（iPhone 瀏海、底部橫條） */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

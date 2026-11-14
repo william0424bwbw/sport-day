@@ -1,4 +1,5 @@
-import { readProject, readVersion, validatePayload, writeProject } from './db.js';
+// @ts-nocheck -- 由 sub-agent 轉成正式 TypeScript（I3）
+import { readProject, readVersion, validatePayload, writeProject } from './db.ts';
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -75,3 +76,6 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+// Durable Object：每場運動會一個，管理 WebSocket 連線與廣播（§J，I4 實作）
+export { ProjectRoom } from './project-room.ts';

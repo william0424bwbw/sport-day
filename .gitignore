@@ -4,3 +4,7 @@ node_modules/
 .wrangler/
 backups/
 .claude/settings.local.json
+dist/
+playwright-report/
+test-results/
+node_modules/.tmp/

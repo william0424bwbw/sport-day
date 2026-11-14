@@ -28,7 +28,7 @@
 
 - **讀取**（老師、工作人員）：不用驗證，`GET /api/projects/:id`
 - **寫入**（管理者）：要帶 `Authorization: Bearer <ADMIN_TOKEN>`，`PUT /api/projects/:id`
-- **輪詢**：前端每 4 秒打一次輕量的 `GET /api/projects/:id/version`，版本有變才抓完整資料，可以省下 D1 讀取量
+- **輪詢**：前端每 4 秒打一次輕量的 `GET /api/projects/:id/version`，版本有變才抓完整資料，可以省下 D1 讀取量（之後改為 Durable Object 即時推送，見 §J）
 
 ---
 
@@ -148,6 +148,139 @@ npx wrangler d1 execute sport-day-db --remote --command \
 npx wrangler d1 execute sport-day-db --remote --command \
   "SELECT e.title, r.role FROM event_referees r JOIN events e USING(project_id) WHERE r.event_id=e.id AND r.name LIKE '%林老師%'"
 ```
+
+### I. 前端重構（方案 C）：以長期好維護為優先
+
+**目標**
+- 拆掉 3,200 行的單一 `index.html`，改成有型別、有測試、可以分開修改的元件。
+- **手機優先**：老師與工作人員用手機順暢查看，不會被切到或擋住；電腦版保留完整排程功能。
+- **完全不依賴外部 CDN**：樣式、圖示、字型都由自己的 Worker 提供，學校網路擋掉外部網站也能正常使用。
+- **PWA**：可以加到手機桌面，現場網路不穩時仍能看到最後同步的賽程。
+
+**技術選型（已決定：React + Vite，2026-11-14）**
+| 項目 | 選擇 | 理由 |
+|---|---|---|
+| 語言 | TypeScript | 前端、Worker 共用資料型別，改欄位時編輯器會指出所有要跟著改的地方 |
+| 框架 | **React 19** | 生態系最大，套件、範例、教學最多；之後找人接手或用 AI 協助維護都最容易 |
+| 建置 | **Vite** + `@cloudflare/vite-plugin` | 一個 `npm run dev` 同時跑前端與 Worker（含本機 D1、Durable Object），建置結果直接部署到 Workers |
+| 不採用 Next.js | — | 這個專案幾乎都在瀏覽器裡運作、不需要 SEO；Next.js 要透過 OpenNext 轉接才能跑在 Workers 上，打包容易超過免費方案 3 MB 上限，PWA 較難做，大版本升級成本高 |
+| 狀態管理 | Zustand | 輕量，取代現在的全域 `state` 物件 |
+| 路由 | React Router（函式庫模式） | 單頁應用內的頁面切換，例如 `/day/:id`、`/event/:id` |
+| 拖曳 | dnd-kit | 同時支援滑鼠與觸控，平板也能拖 |
+| 樣式 | Tailwind CSS（建置時產生） | 沿用現有的 class 寫法，不再用 Play CDN |
+| 圖示 | `lucide-react` | 只打包有用到的圖示 |
+| 字型 | 系統字型（蘋方、微軟正黑體） | 不載入數 MB 的網路字型，手機開啟更快 |
+| 資料檢查 | Zod（前端與 Worker 共用） | 一份 schema 同時用於型別、API 輸入檢查、匯入 JSON 檢查 |
+| Worker 路由 | Hono | 輕量，路由與中介層（權限檢查）寫法清楚 |
+| 即時同步 | **Durable Object + WebSocket**（取代每 4 秒輪詢，見 §J） | 有修改時伺服器主動推送，幾乎即時；沒有修改時不產生請求 |
+| 單元測試 | Vitest | 排程邏輯（磁吸、檢錄重疊、時間換算）與 Worker API |
+| 端對端測試 | Playwright | 取代自寫的 CDP 腳本，可同時測桌機與手機尺寸 |
+| 程式風格 | ESLint + Prettier | 搭配 `.editorconfig`，統一 UTF-8 + LF |
+| PWA | `vite-plugin-pwa` | 離線快取與「有新版本，點此更新」提示 |
+
+**專案結構（規劃）**
+```
+src/
+  shared/          前端與 Worker 共用
+    types.ts         Venue、Day、CommandSlot、ScheduleEvent…
+    schema.ts        Zod schema（API 與匯入檢查）
+    time.ts          分鐘 ⇄ HH:MM、時間選項
+    schedule.ts      磁吸連動、檢錄重疊、延後後續賽程…（純函式，有單元測試）
+    realtime.ts      WebSocket 訊息格式
+  worker/
+    index.ts         Hono 路由、權限
+    db.ts            D1 讀寫（由現在的 src/db.js 轉成 TypeScript）
+    project-room.ts  Durable Object：管理每場運動會的 WebSocket 連線與廣播
+  web/
+    main.tsx、App.tsx、router.tsx
+    stores/          project（賽程資料）、session（角色、密碼、篩選）
+    services/        api.ts、sync.ts（延遲寫入、斷線補傳）、realtime.ts（WebSocket 連線、自動重連）
+    components/      EventCard、EventDetailSheet、FilterChips、TimeInput…
+    views/mobile/    今日總覽、賽程列表、篩選、設定
+    views/desktop/   時間軸格狀表、細節面板、司令台、場地與日期管理
+    features/        細流表輸出、JSON 匯出入、附件
+tests/e2e/         Playwright（桌機 + 手機尺寸）
+migrations/        D1（不變）
+scripts/           *.sh（不變，部署前多一步 npm run build）
+```
+
+**原則：所有功能不分裝置都要能用**（臨時找不到電腦時，手機也能完成所有管理工作）。手機與電腦只是「排版」不同，功能相同。
+
+**手機版畫面**
+- 首頁：「進行中」與「下一項（幾分鐘後檢錄）」大卡片
+- 賽程列表：依時間排列，可依年級、場地、人員姓名篩選
+- 點卡片從底部滑出細節：檢錄時間、場地、裁判、器材、道次表
+- 底部導覽列：今日、列表、篩選、設定；按鈕至少 44px
+- **管理者在手機上擁有完整功能**：
+  - 新增、編輯、複製、刪除賽程：用全螢幕表單（時間、場地、裁判、器材、志工、公差、備註）
+  - 單一場地時間軸：長按賽程卡片拖曳調整時間、拉動邊緣調整長度（dnd-kit 觸控）
+  - 現場調度：標記開始/結束、時間 ±5 分鐘、延後後續賽程（磁吸連動）
+  - 道次表附件：可直接用手機相機拍照上傳
+  - 場地、比賽日、司令台時段、大會人員的新增與編輯
+  - 細流表輸出、JSON 匯出與匯入、雲端同步設定
+
+**電腦版畫面**
+- 保留現在的「時間 × 場地」格狀表與右側細節面板，外觀盡量維持
+- 拖曳改用 dnd-kit，滑鼠與觸控都能用（平板也能拖）
+- 和手機版共用同一套表單與商業邏輯，只是排版不同
+
+**不做的功能**
+- ~~匯出獨立分享網頁~~：改由 PWA 提供「安裝到手機、離線瀏覽」，不再匯出 HTML 檔（2026-11-14 決定）
+
+**階段與步驟**
+- [ ] I0. 決策與設計：手機版線框圖、功能對照表（現有 19 個功能區、6 個彈窗逐項列出，標記「保留 / 調整 / 刪除」）
+- [ ] I1. 工程骨架：Vite + React + TS + Tailwind + Cloudflare 外掛；ESLint、Prettier、Vitest、Playwright；更新 `scripts/*.sh` 與 `test.yml`
+- [ ] I2. 共用邏輯：把磁吸、檢錄重疊、時間換算等從舊檔案抽成 `src/shared/` 純函式，先寫「行為對照測試」確保結果和舊版一致
+- [ ] I3. 資料層：型別與 Zod schema、API client、同步服務、Zustand store；Worker 轉 TypeScript + Hono，現有 API 測試全部通過
+- [ ] I4. 即時同步：Durable Object + WebSocket（§J），新版一開始就用推送，不再實作輪詢
+- [ ] I5. 共用表單與檢視元件：賽程表單、場地／比賽日／司令台表單、細節面板，手機與電腦共用
+- [ ] I6. 手機版排版：今日總覽、賽程列表、單一場地時間軸（觸控拖曳）、底部導覽、全螢幕表單
+- [ ] I7. 電腦版排版：時間 × 場地格狀表、拖曳、右側細節面板
+- [ ] I8. 輸出功能：細流表（公文 / CSV）、JSON 匯出與匯入、列印樣式、附件（含手機拍照上傳）
+- [ ] I9. PWA 與離線：安裝到桌面、離線瀏覽、新版本提示
+- [ ] I10. 切換上線：功能對照表全部完成、端對端測試（桌機 + 手機尺寸）通過、實際用手機演練管理者流程 → 新版直接取代 `/`，刪除 `public/index.html`（舊版保留在 git 歷史中）
+
+**時程與風險**
+- 運動會 12/14 開始。目標 **12/5 前完成 I10**，12/7 用新版做一次總預演。
+- 目前是測試階段，**直接使用新版、不保留舊版**（2026-11-14 決定）。新版開發期間，舊版仍在正式網址運作，直到 I10 切換為止。
+- 新舊版共用同一個 D1 與 API，資料不會分岔。
+
+**已決定的事（2026-11-14）**
+1. 框架：React + Vite（不用 Next.js）。
+2. 不保留「匯出獨立分享網頁」，改由 PWA 提供離線瀏覽。
+3. 直接切換到新版，不保留 `/legacy/`。
+4. 管理者功能不分裝置都要完整提供。
+
+### J. 即時同步：以 Durable Object 取代輪詢
+
+**現況**：每台裝置每 4 秒問一次「版本有沒有變」。全校 100 支手機開著，就是每分鐘約 1,500 個請求，而且最慢要 4 秒才看到更新。
+
+**新做法**
+```
+管理者 PUT ──► Worker ──► 寫入 D1（資料仍以 D1 為準）
+                  │
+                  └──► ProjectRoom（Durable Object，每場運動會一個）
+                          │  廣播 { type: "updated", updatedAt }
+                          ▼
+              所有開著網頁的手機／電腦（WebSocket）──► 下載最新賽程
+```
+- 每場運動會（`projectId`）對應一個 Durable Object，負責管理所有 WebSocket 連線。
+- 管理者儲存成功後，Worker 通知 Durable Object 廣播新版本號；各裝置收到後再下載完整資料（資料量小，邏輯簡單）。
+- 使用 **WebSocket Hibernation API**：沒有訊息時 Durable Object 會休眠、不計執行時間，費用極低。
+- 心跳用 `setWebSocketAutoResponse` 自動回應，不喚醒 Durable Object。
+- **斷線處理**：前端自動重連（指數退避）；重連成功先查一次版本號，避免漏掉斷線期間的更新。
+- **備援**：WebSocket 連不上（例如網路設備擋掉）時，自動退回每 30 秒輪詢一次，確保不會「被擋住就看不到更新」。
+- 之後可以順便推送「目前線上人數」、「管理者正在編輯」等狀態。
+
+**為什麼資料仍以 D1 為準**：D1 可以直接用 SQL 查詢與維護（§H），Durable Object 只負責「通知」，職責單純。之後若需要多位管理者同時編輯，再評估讓 Durable Object 負責合併修改。
+
+**步驟**
+- [ ] J1. `wrangler.jsonc` 新增 Durable Object 綁定與 migration（SQLite 型，免費方案可用）
+- [ ] J2. `ProjectRoom`：接受 WebSocket、Hibernation、廣播、心跳自動回應
+- [ ] J3. API：`GET /api/projects/:id/ws` 升級為 WebSocket；`PUT` 成功後通知廣播
+- [ ] J4. 前端 `realtime.ts`：連線、重連、退回輪詢的備援
+- [ ] J5. 測試：兩個瀏覽器分頁，一邊修改、另一邊 1 秒內更新；中斷網路再恢復能補上更新
+- [ ] J6. 舊版前端在切換前仍使用輪詢（不另外改舊版）；新版上線後，`/version` 輪詢只剩備援用途
 
 ---
 

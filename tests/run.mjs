@@ -1,17 +1,16 @@
 // 測試主程式：建立獨立的本機 D1 → 套用 migrations → 啟動 wrangler dev → 跑測試 → 關閉
-// 用法：node tests/run.mjs [--snapshot <正式資料.json>] [--skip-e2e]
+// 用法：node tests/run.mjs [--snapshot <正式資料.json>]
+// 需要先 npm run build（Worker 會提供 dist/ 靜態檔）。端對端測試改由 Playwright（tests/e2e）執行。
 import { spawn, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runApiTests } from './api.test.mjs';
-import { runE2eTests } from './e2e.test.mjs';
 import { sleep } from './lib.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const snapshotFile = args.includes('--snapshot') ? args[args.indexOf('--snapshot') + 1] : null;
-const skipE2e = args.includes('--skip-e2e');
 
 const PORT = 8799;
 const BASE = `http://localhost:${PORT}`;
@@ -62,7 +61,6 @@ try {
   console.log(`  ✔ ${BASE}\n`);
 
   failed += await runApiTests({ base: BASE, token: TOKEN, snapshotFile });
-  if (!skipE2e) failed += await runE2eTests({ base: BASE, token: TOKEN });
 } catch (err) {
   console.error('❌', err.message);
   failed += 1;

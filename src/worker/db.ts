@@ -1,3 +1,4 @@
+// @ts-nocheck -- 由 sub-agent 轉成正式 TypeScript（I3）
 // 賽程資料 <-> D1 資料表
 // 對外（API / 前端）仍是同一份 JSON：{ venues, dates, events }
 // 寫入時用 SQLite 的 json_each 在資料庫內拆解，每張表只需 1 條 SQL，

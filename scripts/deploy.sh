@@ -2,6 +2,9 @@
 # 日常部署：套用 D1 migrations → 部署 Worker → 同步 ADMIN_TOKEN secret
 . "$(dirname "$0")/_env.sh"
 
+echo "▶ 建置前端"
+bash scripts/build.sh
+
 echo "▶ 套用 D1 migrations"
 $WR d1 migrations apply sport-day-db --remote
 
