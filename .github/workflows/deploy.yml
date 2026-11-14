@@ -1,8 +1,8 @@
 name: Deploy to Cloudflare
 
+# 只能手動觸發：GitHub → Actions → Deploy to Cloudflare → Run workflow
+# push 不會自動部署（平常用本機的 bash scripts/deploy.sh）
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

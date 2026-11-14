@@ -24,6 +24,6 @@
 ## 常用指令
 - 本機開發：`npm run dev`
 - 測試：`bash scripts/test.sh`（獨立本機資料庫；CI 部署前也會執行）
-- 部署：`bash scripts/deploy.sh`（push 到 `main` 也會由 GitHub Actions 自動部署）
+- 部署：`bash scripts/deploy.sh`（**push 不會自動部署**；GitHub Actions 的 `test.yml` 只跑測試，`deploy.yml` 只能手動觸發）
 - 新增 D1 migration：`npm run db:new -- <名稱>`
 - 備份：`bash scripts/backup.sh`

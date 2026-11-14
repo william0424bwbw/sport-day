@@ -69,12 +69,10 @@
 - [x] 把 Lucide 鎖定版本，已鎖定 `lucide@1.66.0`，Tailwind 鎖定 `3.4.17`
 - [x] 把舊的 Firebase 資料搬到 D1（2026-11-14 完成：7 場地、5 日、33 筆賽程）
 
-### E. CI/CD 自動部署
-- [ ] 在 GitHub repo → Settings → Secrets and variables → Actions 新增：
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
-  - `ADMIN_TOKEN`
-- [ ] 之後 **push 到 `main` 就會自動執行**：套用 D1 migrations → 部署 Worker → 同步 secret
+### E. CI/CD（push 不自動部署）
+- [x] push 到 `main` 或開 PR：GitHub Actions 只跑測試（`.github/workflows/test.yml`），不需要 Secrets
+- [x] 部署平常用本機的 `bash scripts/deploy.sh`
+- [ ] （選用）若要從 GitHub 手動部署：到 repo → Settings → Secrets and variables → Actions 新增 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_TOKEN`，之後在 Actions → Deploy to Cloudflare → Run workflow 手動執行
 - [ ] 確認部署網址可以正常開啟，三種角色（admin / staff / teacher）都測試一遍
 
 ### F. 日常維護（全部用腳本）
@@ -391,7 +389,7 @@ curl -fsS -X PUT "$WORKER_URL/api/projects/$PROJECT" \
 echo
 ```
 
-### `.github/workflows/deploy.yml`
+
 ```yaml
 name: Deploy to Cloudflare
 
