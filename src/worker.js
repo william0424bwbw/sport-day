@@ -28,6 +28,11 @@ async function handleApi(request, env, url) {
   // /api/health
   if (url.pathname === '/api/health') return json({ ok: true });
 
+  // /api/auth：檢查 Authorization 標頭裡的管理者密碼是否正確（不寫入任何資料）
+  if (url.pathname === '/api/auth' && request.method === 'GET') {
+    return json({ admin: isAdmin(request, env) });
+  }
+
   // /api/projects/:id  與  /api/projects/:id/version
   const m = url.pathname.match(/^\/api\/projects\/([^/]+)(\/version)?$/);
   if (!m || !ID_RE.test(m[1])) return json({ error: 'not_found' }, 404);

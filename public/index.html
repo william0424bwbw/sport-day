@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小學運動會視覺化賽程排程系統</title>
     <!-- 引入 Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <!-- 引入 Google Fonts: Inter & Noto Sans TC -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <!-- 引入 Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@1.66.0/dist/umd/lucide.min.js"></script>
     <style>
         body {
             font-family: 'Inter', 'Noto Sans TC', sans-serif;
@@ -147,8 +147,8 @@
 
         <!-- 右側：雲端同步、細流輸出、場地管理、發布切換 -->
         <div class="flex items-center gap-1.5 shrink-0" id="topRightControls">
-            <!-- 雲端即時同步設定按鈕（解決 Netlify 重新上傳痛點） -->
-            <button onclick="openCloudSyncModal()" id="btn-cloud-sync" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition-colors" title="接上免費 Firebase 即時資料庫，改完賽程全校手機自動同步，免重新上傳">
+            <!-- 雲端同步設定按鈕（Cloudflare Workers + D1） -->
+            <button onclick="openCloudSyncModal()" id="btn-cloud-sync" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition-colors" title="查看雲端同步狀態、輸入管理者密碼">
                 <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
                 <span class="hidden xl:inline">雲端同步</span>
             </button>
@@ -168,7 +168,7 @@
                 <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
                 <span id="appModeLabel">演示測試版</span>
             </button>
-            <button onclick="exportStandaloneHtml()" id="btn-export-html" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors" title="匯出為單一網頁檔，可直接上傳 Netlify 或嵌入網站">
+            <button onclick="exportStandaloneHtml()" id="btn-export-html" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors" title="匯出為單一網頁檔（離線可開，連網時會自動讀取雲端最新賽程）">
                 <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
                 <span class="hidden md:inline">匯出分享網頁</span>
             </button>
@@ -351,7 +351,7 @@
 
     </div>
 
-    <!-- ==================== 彈窗 1：免費雲端即時同步設定 (Firebase Realtime Database) ==================== -->
+    <!-- ==================== 彈窗 1：雲端同步設定 (Cloudflare Workers + D1) ==================== -->
     <div id="cloudSyncModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-3">
@@ -359,7 +359,7 @@
                     <div class="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
                         <i data-lucide="cloud" class="w-4 h-4"></i>
                     </div>
-                    <h3 class="text-base font-bold text-slate-900">雲端即時資料庫同步（免重新上傳網頁）</h3>
+                    <h3 class="text-base font-bold text-slate-900">雲端同步設定</h3>
                 </div>
                 <button onclick="closeCloudSyncModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                     <i data-lucide="x" class="w-4 h-4"></i>
@@ -367,39 +367,33 @@
             </div>
 
             <div class="bg-sky-50/80 border border-sky-100 rounded-xl p-3.5 mb-4 text-xs text-sky-900 leading-relaxed space-y-1.5">
-                <p class="font-bold">為什麼需要這個設定？</p>
-                <p>只要綁定一組免費的 Google Firebase 資料庫網址，之後您把「匯出分享網頁」傳上 Netlify 後，<b>您在管理端修改任何時間、順延賽程或上傳道次表，全校老師手機上的網頁 1 秒內自動同步更新</b>，再也不用每次重新匯出上傳！</p>
+                <p>賽程統一存放在學校的雲端資料庫，<b>所有老師與工作人員打開網頁就會看到最新賽程，並每幾秒自動更新</b>。</p>
+                <p>只有輸入<b>管理者密碼</b>的裝置可以修改並儲存賽程；未輸入密碼時只能瀏覽。</p>
             </div>
 
             <div class="space-y-3 mb-4">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Firebase Realtime Database 網址 (URL)</label>
-                    <input type="url" id="cloudDbUrlInput" placeholder="例如：https://my-sports-day-default-rtdb.firebaseio.com" class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
-                    <p class="text-[11px] text-slate-400 mt-1">留空並儲存則切回「本機瀏覽器儲存」模式。</p>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">連線位置</label>
+                    <div id="cloudApiBaseDisplay" class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl text-slate-600 break-all">—</div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">運動會專案代碼（多場活動區隔用）</label>
+                    <label for="cloudAdminTokenInput" class="block text-xs font-bold text-slate-700 mb-1">管理者密碼（只有管理者需要填）</label>
+                    <input type="password" id="cloudAdminTokenInput" autocomplete="current-password" placeholder="留空表示只瀏覽、不寫入" class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <p class="text-[11px] text-slate-400 mt-1">密碼只儲存在這台裝置的瀏覽器中。</p>
+                </div>
+
+                <div>
+                    <label for="cloudProjectIdInput" class="block text-xs font-bold text-slate-700 mb-1">運動會專案代碼（多場活動區隔用）</label>
                     <input type="text" id="cloudProjectIdInput" value="school-sports-115" placeholder="school-sports-115" class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
                 </div>
             </div>
 
-            <!-- 30 秒申請教學摺疊區 -->
-            <details class="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600">
-                <summary class="font-bold text-slate-800 cursor-pointer">📖 30 秒免費取得 Firebase 網址教學（免信用卡）</summary>
-                <ol class="list-decimal list-inside mt-2 space-y-1 text-[11px] leading-relaxed">
-                    <li>前往 <b>console.firebase.google.com</b> 用 Google 帳號登入並「新增專案」。</li>
-                    <li>左側選單點選「建構 (Build)」➔「<b>Realtime Database</b>」➔「建立資料庫」。</li>
-                    <li>安全規則選擇「<b>以測試模式啟動 (Start in test mode)</b>」並按下啟用。</li>
-                    <li>複製畫面上方那串 <code class="bg-white px-1 py-0.5 rounded border">https://xxxx.firebaseio.com</code> 網址貼回上方即可！</li>
-                </ol>
-            </details>
-
             <div id="cloudSyncTestResult" class="hidden mb-3 p-2.5 rounded-xl text-xs font-semibold"></div>
 
             <div class="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-100">
-                <button onclick="pushLocalToCloudNow()" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors">
-                    立即上傳本機資料至雲端
+                <button onclick="confirmOverwriteCloud()" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors" title="用這台裝置上的賽程覆蓋雲端資料（需要管理者密碼）">
+                    以本機資料覆蓋雲端
                 </button>
                 <div class="flex items-center gap-2">
                     <button onclick="closeCloudSyncModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">取消</button>
@@ -731,13 +725,22 @@
             events: []
         };
 
+        // 雲端同步（Cloudflare Workers + D1）
+        // apiBase：API 所在網址。部署在 Worker 上時為同網域（location.origin）；
+        //          匯出的獨立網頁（file://）則使用內嵌的網址。空字串代表單機模式。
         let cloudConfig = {
-            dbUrl: '',
+            apiBase: '',
             projectId: 'school-sports-115',
+            adminToken: '',
+            isAdminVerified: false,
             isConnected: false,
             pollTimer: null,
+            pushTimer: null,
+            pushInFlight: false,
             lastCloudHash: ''
         };
+        const CLOUD_POLL_MS = 4000;
+        const CLOUD_PUSH_DEBOUNCE_MS = 800;
 
         let editingCommandSlotId = null;
 
@@ -760,8 +763,8 @@
                 state.currentDateId = embeddedData.currentDateId || state.dates[0]?.id || '12-19';
                 state.appMode = paramMode || embeddedData.appMode || 'published';
                 state.role = paramRole || embeddedData.defaultRole || 'teacher';
-                if (embeddedData.cloudConfig && embeddedData.cloudConfig.dbUrl) {
-                    cloudConfig.dbUrl = embeddedData.cloudConfig.dbUrl;
+                if (embeddedData.cloudConfig && embeddedData.cloudConfig.apiBase) {
+                    cloudConfig.apiBase = embeddedData.cloudConfig.apiBase;
                     cloudConfig.projectId = embeddedData.cloudConfig.projectId || 'school-sports-115';
                 }
             } else {
@@ -784,15 +787,18 @@
                 if (paramRole && ['admin', 'staff', 'teacher'].includes(paramRole)) state.role = paramRole;
                 if (paramMode && ['demo', 'published'].includes(paramMode)) state.appMode = paramMode;
 
-                const savedCloudRaw = localStorage.getItem(CLOUD_CFG_KEY);
-                if (savedCloudRaw) {
-                    try {
-                        const cParsed = JSON.parse(savedCloudRaw);
-                        cloudConfig.dbUrl = cParsed.dbUrl || '';
-                        cloudConfig.projectId = cParsed.projectId || 'school-sports-115';
-                    } catch (e) {}
-                }
             }
+
+            // 雲端設定：管理者密碼與專案代碼存在本機；網址列 ?project= 可指定專案
+            try {
+                const cParsed = JSON.parse(localStorage.getItem(CLOUD_CFG_KEY) || '{}');
+                if (cParsed.adminToken) cloudConfig.adminToken = cParsed.adminToken;
+                if (cParsed.projectId && !embeddedData) cloudConfig.projectId = cParsed.projectId;
+            } catch (e) {}
+            const paramProject = urlParams.get('project');
+            if (paramProject && /^[A-Za-z0-9_-]{1,64}$/.test(paramProject)) cloudConfig.projectId = paramProject;
+            // 透過 http(s) 開啟（部署在 Cloudflare Worker 或 wrangler dev）時，API 與網頁同網域
+            if (/^https?:$/.test(window.location.protocol)) cloudConfig.apiBase = window.location.origin;
 
             state.dates = state.dates.map(d => ({
                 ...d,
@@ -812,9 +818,9 @@
             updateAppModeUI();
             updateLiveIndicator();
 
-            // 若有設定雲端資料庫網址，立即連線並開啟即時同步
-            if (cloudConfig.dbUrl) {
-                connectCloudDatabase(Boolean(embeddedData));
+            // 有雲端 API 時立即連線：雲端（D1）是唯一資料來源，本機 localStorage 只當離線快取
+            if (cloudConfig.apiBase) {
+                connectCloudDatabase();
             } else {
                 updateCloudSyncUI();
             }
@@ -857,21 +863,54 @@
                 showToast('提醒：本機空間較滿，建議刪除過大的道次表圖片或改用 PDF');
             }
 
-            // 若已連線 Firebase 雲端資料庫且目前為管理者編輯，同步推送至雲端
-            if (!skipCloudPush && cloudConfig.dbUrl && cloudConfig.isConnected && state.role === 'admin') {
-                pushLocalToCloudNow(true);
+            // 管理者（已驗證密碼）修改後，延遲合併推送到雲端，避免拖曳時連續寫入
+            if (!skipCloudPush && cloudConfig.apiBase) {
+                if (canEditCloud()) {
+                    scheduleCloudPush();
+                } else if (state.role === 'admin') {
+                    warnReadOnlyEdit();
+                }
             }
         }
 
-        // ==================== 雲端即時資料庫同步 (Firebase REST API) ====================
+        // ==================== 雲端同步 (Cloudflare Workers + D1 REST API) ====================
         function getCloudEndpointUrl() {
-            const cleanBase = cloudConfig.dbUrl.trim().replace(/\/+$/, '');
-            const cleanProj = (cloudConfig.projectId || 'school-sports-115').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-            return `${cleanBase}/artifacts/${cleanProj}.json`;
+            const base = (cloudConfig.apiBase || '').trim().replace(/\/+$/, '');
+            const proj = (cloudConfig.projectId || 'school-sports-115').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+            return `${base}/api/projects/${proj}`;
+        }
+
+        function getAuthHeaders() {
+            return cloudConfig.adminToken ? { 'Authorization': `Bearer ${cloudConfig.adminToken}` } : {};
+        }
+
+        // 是否可以把修改寫入雲端：有 API、密碼已驗證、目前是管理者視角
+        function canEditCloud() {
+            return Boolean(cloudConfig.apiBase && cloudConfig.adminToken && cloudConfig.isAdminVerified && state.role === 'admin');
+        }
+
+        let lastReadOnlyWarnAt = 0;
+        function warnReadOnlyEdit() {
+            const now = Date.now();
+            if (now - lastReadOnlyWarnAt < 15000) return;
+            lastReadOnlyWarnAt = now;
+            showToast('尚未輸入管理者密碼：修改只存在這台裝置，不會存到雲端（點「雲端同步」輸入密碼）');
+        }
+
+        function saveCloudLocalSettings() {
+            try {
+                localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify({
+                    projectId: cloudConfig.projectId,
+                    adminToken: cloudConfig.adminToken
+                }));
+            } catch (e) {}
         }
 
         function openCloudSyncModal() {
-            document.getElementById('cloudDbUrlInput').value = cloudConfig.dbUrl || '';
+            document.getElementById('cloudApiBaseDisplay').textContent = cloudConfig.apiBase
+                ? getCloudEndpointUrl()
+                : '未連線（以檔案方式開啟，資料只存在這台裝置）';
+            document.getElementById('cloudAdminTokenInput').value = cloudConfig.adminToken || '';
             document.getElementById('cloudProjectIdInput').value = cloudConfig.projectId || 'school-sports-115';
             document.getElementById('cloudSyncTestResult').classList.add('hidden');
             document.getElementById('cloudSyncModal').classList.remove('hidden');
@@ -882,122 +921,211 @@
             document.getElementById('cloudSyncModal').classList.add('hidden');
         }
 
-        async function saveCloudSyncSettings() {
-            const url = document.getElementById('cloudDbUrlInput').value.trim();
-            const projId = document.getElementById('cloudProjectIdInput').value.trim() || 'school-sports-115';
-
-            cloudConfig.dbUrl = url;
-            cloudConfig.projectId = projId;
-            localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify({ dbUrl: url, projectId: projId }));
-
-            if (!url) {
-                if (cloudConfig.pollTimer) clearInterval(cloudConfig.pollTimer);
-                cloudConfig.isConnected = false;
-                updateCloudSyncUI();
-                closeCloudSyncModal();
-                showToast('已切回單機瀏覽器儲存模式');
-                return;
-            }
-
-            const resultBox = document.getElementById('cloudSyncTestResult');
-            resultBox.classList.remove('hidden');
-            resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200';
-            resultBox.textContent = '正在連線測試雲端資料庫...';
-
-            const ok = await connectCloudDatabase(false);
-            if (ok) {
-                resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
-                resultBox.textContent = '✅ 連線成功！之後修改任何賽程將即時同步至所有裝置。';
-                setTimeout(() => closeCloudSyncModal(), 900);
-            } else {
-                resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200';
-                resultBox.textContent = '❌ 無法連線，請確認網址格式（https://xxx.firebaseio.com）及已開啟測試模式權限。';
-            }
+        function setCloudResult(kind, text) {
+            const styles = {
+                info: 'bg-sky-50 text-sky-700 border-sky-200',
+                ok: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                warn: 'bg-amber-50 text-amber-800 border-amber-200',
+                error: 'bg-rose-50 text-rose-700 border-rose-200'
+            };
+            const box = document.getElementById('cloudSyncTestResult');
+            box.className = `mb-3 p-2.5 rounded-xl text-xs font-semibold border ${styles[kind] || styles.info}`;
+            box.textContent = text;
         }
 
-        async function connectCloudDatabase(preferCloudOverLocal = false) {
-            if (!cloudConfig.dbUrl) return false;
+        async function verifyAdminToken() {
+            cloudConfig.isAdminVerified = false;
+            if (!cloudConfig.apiBase || !cloudConfig.adminToken) return false;
             try {
-                const endpoint = getCloudEndpointUrl();
-                const res = await fetch(endpoint);
+                const base = cloudConfig.apiBase.trim().replace(/\/+$/, '');
+                const res = await fetch(`${base}/api/auth`, { headers: getAuthHeaders(), cache: 'no-store' });
+                const data = await res.json();
+                cloudConfig.isAdminVerified = Boolean(data && data.admin);
+            } catch (e) {}
+            return cloudConfig.isAdminVerified;
+        }
+
+        async function saveCloudSyncSettings() {
+            if (!cloudConfig.apiBase) {
+                setCloudResult('warn', '目前以檔案方式開啟，無法連線雲端。請改用學校的網址開啟本系統。');
+                return;
+            }
+            const token = document.getElementById('cloudAdminTokenInput').value.trim();
+            const projId = (document.getElementById('cloudProjectIdInput').value.trim() || 'school-sports-115')
+                .replace(/[^a-zA-Z0-9_-]/g, '_');
+
+            if (projId !== cloudConfig.projectId) {
+                cloudConfig.lastCloudHash = '';
+                cloudConfig.dirty = false;
+            }
+            cloudConfig.adminToken = token;
+            cloudConfig.projectId = projId;
+            saveCloudLocalSettings();
+
+            setCloudResult('info', '正在連線雲端資料庫...');
+            const ok = await connectCloudDatabase();
+            if (!ok) {
+                setCloudResult('error', '❌ 無法連線雲端資料庫，請檢查網路後再試一次。');
+                return;
+            }
+            if (!token) {
+                setCloudResult('ok', '✅ 已連線（瀏覽模式）。賽程會自動更新，但不會儲存修改。');
+            } else if (cloudConfig.isAdminVerified) {
+                setCloudResult('ok', '✅ 已連線，管理者密碼正確。之後的修改會自動儲存到雲端。');
+            } else {
+                setCloudResult('error', '❌ 管理者密碼不正確，目前只能瀏覽。');
+                return;
+            }
+            setTimeout(() => closeCloudSyncModal(), 1200);
+        }
+
+        // 連線雲端：讀取最新賽程（雲端為唯一資料來源），並啟動輪詢
+        async function connectCloudDatabase() {
+            if (!cloudConfig.apiBase) return false;
+            if (!cloudConfig.pollTimer) cloudConfig.pollTimer = setInterval(pollCloudUpdates, CLOUD_POLL_MS);
+            try {
+                const res = await fetch(getCloudEndpointUrl(), { cache: 'no-store' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const cloudData = await res.json();
-
                 cloudConfig.isConnected = true;
-                updateCloudSyncUI();
+                await verifyAdminToken();
 
-                if (cloudData && cloudData.events) {
-                    if (preferCloudOverLocal || state.role !== 'admin') {
-                        applyCloudPayload(cloudData);
-                    }
-                } else if (state.role === 'admin') {
-                    // 雲端尚無資料，自動將目前本機賽程推送上去
+                if (cloudData && Array.isArray(cloudData.events)) {
+                    cloudConfig.lastCloudHash = String(cloudData.updatedAt || '');
+                    cloudConfig.dirty = false;
+                    applyCloudPayload(cloudData);
+                } else if (canEditCloud()) {
+                    // 雲端還沒有這個專案：由管理者把本機賽程上傳建立
                     await pushLocalToCloudNow(true);
                 }
-
-                // 啟動每 4 秒輪詢監聽雲端最新變更（讓全校導師/工作人員手機即時自動更新）
-                if (cloudConfig.pollTimer) clearInterval(cloudConfig.pollTimer);
-                cloudConfig.pollTimer = setInterval(pollCloudUpdates, 4000);
+                updateCloudSyncUI();
                 return true;
             } catch (e) {
+                // 斷線時保留輪詢，網路恢復後會自動重新連上
                 cloudConfig.isConnected = false;
                 updateCloudSyncUI();
                 return false;
             }
         }
 
-        async function pushLocalToCloudNow(silent = false) {
-            if (!cloudConfig.dbUrl) {
-                showToast('請先輸入 Firebase 資料庫網址');
-                return;
-            }
-            try {
-                const payload = {
-                    updatedAt: Date.now(),
-                    venues: state.venues,
-                    dates: state.dates,
-                    events: state.events
-                };
-                const rawJson = JSON.stringify(payload);
-                cloudConfig.lastCloudHash = String(payload.updatedAt);
+        function scheduleCloudPush() {
+            cloudConfig.dirty = true;
+            if (cloudConfig.pushTimer) clearTimeout(cloudConfig.pushTimer);
+            cloudConfig.pushTimer = setTimeout(() => {
+                cloudConfig.pushTimer = null;
+                pushLocalToCloudNow(true);
+            }, CLOUD_PUSH_DEBOUNCE_MS);
+        }
 
+        function confirmOverwriteCloud() {
+            if (!confirm('確定要用這台裝置上的賽程覆蓋雲端資料嗎？\n其他裝置會在幾秒內看到這份資料。')) return;
+            pushLocalToCloudNow(false);
+        }
+
+        async function pushLocalToCloudNow(silent = false) {
+            if (!cloudConfig.apiBase) {
+                if (!silent) showToast('目前以檔案方式開啟，無法上傳雲端');
+                return false;
+            }
+            if (!cloudConfig.adminToken || !cloudConfig.isAdminVerified) {
+                if (!silent) showToast('請先在「雲端同步」輸入正確的管理者密碼');
+                return false;
+            }
+            if (cloudConfig.pushInFlight) {
+                cloudConfig.pushAgain = true;
+                return false;
+            }
+
+            cloudConfig.pushInFlight = true;
+            cloudConfig.dirty = false;
+            try {
                 const res = await fetch(getCloudEndpointUrl(), {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: rawJson
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ venues: state.venues, dates: state.dates, events: state.events })
                 });
-                if (!res.ok) throw new Error('Push failed');
+                if (res.status === 401) {
+                    cloudConfig.isAdminVerified = false;
+                    cloudConfig.dirty = false;
+                    updateCloudSyncUI();
+                    showToast('管理者密碼已失效，修改只存在這台裝置，請重新輸入密碼');
+                    return false;
+                }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const result = await res.json();
+                // 用伺服器回傳的版本號，避免輪詢時把自己剛寫入的資料當成新版本
+                cloudConfig.lastCloudHash = String(result.updatedAt);
                 cloudConfig.isConnected = true;
                 updateCloudSyncUI();
-                if (!silent) showToast('☁️ 已將最新賽程同步上傳至雲端！');
+                if (!silent) showToast('☁️ 已將目前賽程儲存到雲端！');
+                return true;
             } catch (e) {
+                // 網路問題：保留待上傳標記，恢復連線後由輪詢自動補傳
+                cloudConfig.dirty = true;
                 cloudConfig.isConnected = false;
                 updateCloudSyncUI();
-                if (!silent) showToast('雲端上傳失敗，請檢查網路或資料庫權限');
+                if (!silent) showToast('雲端儲存失敗，修改已暫存在這台裝置，恢復連線後會自動上傳');
+                return false;
+            } finally {
+                cloudConfig.pushInFlight = false;
+                if (cloudConfig.pushAgain) {
+                    cloudConfig.pushAgain = false;
+                    scheduleCloudPush();
+                }
             }
         }
 
+        // 輪詢：先查版本號（很輕量），有變才下載完整賽程
         async function pollCloudUpdates() {
-            if (!cloudConfig.dbUrl || !cloudConfig.isConnected) return;
+            if (!cloudConfig.apiBase) return;
             try {
-                const res = await fetch(getCloudEndpointUrl());
-                if (!res.ok) return;
-                const data = await res.json();
-                if (!data || !data.updatedAt) return;
+                const res = await fetch(`${getCloudEndpointUrl()}/version`, { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const { updatedAt } = await res.json();
 
-                const incomingHash = String(data.updatedAt);
-                if (incomingHash !== cloudConfig.lastCloudHash) {
-                    cloudConfig.lastCloudHash = incomingHash;
-                    applyCloudPayload(data);
+                if (!cloudConfig.isConnected) {
+                    cloudConfig.isConnected = true;
+                    if (cloudConfig.adminToken && !cloudConfig.isAdminVerified) await verifyAdminToken();
+                    updateCloudSyncUI();
                 }
-            } catch (e) {}
+
+                // 本機有尚未上傳的修改：先補傳，不要被雲端資料蓋掉
+                if (cloudConfig.dirty && !canEditCloud()) cloudConfig.dirty = false;
+                if (cloudConfig.dirty || cloudConfig.pushTimer || cloudConfig.pushInFlight) {
+                    if (cloudConfig.dirty && !cloudConfig.pushTimer && !cloudConfig.pushInFlight) pushLocalToCloudNow(true);
+                    return;
+                }
+
+                if (!updatedAt || String(updatedAt) === cloudConfig.lastCloudHash) return;
+                const full = await fetch(getCloudEndpointUrl(), { cache: 'no-store' });
+                if (!full.ok) return;
+                const data = await full.json();
+                if (!data || !Array.isArray(data.events)) return;
+                if (cloudConfig.dirty || cloudConfig.pushTimer || cloudConfig.pushInFlight) return;
+                cloudConfig.lastCloudHash = String(data.updatedAt);
+                applyCloudPayload(data);
+            } catch (e) {
+                if (cloudConfig.isConnected) {
+                    cloudConfig.isConnected = false;
+                    updateCloudSyncUI();
+                }
+            }
         }
 
         function applyCloudPayload(data) {
             if (!data) return;
             if (Array.isArray(data.venues) && data.venues.length > 0) state.venues = data.venues;
-            if (Array.isArray(data.dates) && data.dates.length > 0) state.dates = data.dates;
+            if (Array.isArray(data.dates) && data.dates.length > 0) {
+                state.dates = data.dates.map(d => ({
+                    ...d,
+                    commandDeckEnabled: typeof d.commandDeckEnabled === 'boolean' ? d.commandDeckEnabled : (d.commandSlots && d.commandSlots.length > 0),
+                    generalStaff: d.generalStaff || { hosts: '', recorders: '', stageControl: '' },
+                    commandSlots: d.commandSlots || []
+                }));
+                if (!state.dates.some(d => d.id === state.currentDateId)) state.currentDateId = state.dates[0].id;
+            }
             if (Array.isArray(data.events)) state.events = data.events.map(normalizeEventData);
+            if (state.selectedEventId && !state.events.some(e => e.id === state.selectedEventId)) state.selectedEventId = null;
 
             saveToStorage(true);
             renderVenuesHeader();
@@ -1013,18 +1141,29 @@
             const btn = document.getElementById('btn-cloud-sync');
             if (!badge || !btn) return;
 
-            if (cloudConfig.dbUrl && cloudConfig.isConnected) {
-                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors';
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 雲端即時同步中`;
-                btn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors';
-            } else if (cloudConfig.dbUrl && !cloudConfig.isConnected) {
-                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer';
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> 雲端未連線`;
+            const badgeBase = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border cursor-pointer transition-colors';
+            const btnBase = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-colors';
+            let tone, dot, label;
+
+            if (!cloudConfig.apiBase) {
+                tone = 'slate'; dot = 'bg-slate-400'; label = '單機儲存';
+            } else if (!cloudConfig.isConnected) {
+                tone = 'rose'; dot = 'bg-rose-500'; label = '雲端未連線';
+            } else if (cloudConfig.isAdminVerified) {
+                tone = 'emerald'; dot = 'bg-emerald-500 animate-pulse'; label = '雲端同步中（可編輯）';
             } else {
-                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors';
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> 單機儲存`;
-                btn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition-colors';
+                tone = 'sky'; dot = 'bg-sky-500 animate-pulse'; label = '雲端同步中（瀏覽）';
             }
+
+            const tones = {
+                slate: 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200',
+                rose: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100',
+                emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+                sky: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'
+            };
+            badge.className = `${badgeBase} ${tones[tone]}`;
+            badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${dot}"></span> ${label}`;
+            btn.className = `${btnBase} ${tones[tone === 'slate' ? 'sky' : tone]}`;
         }
 
         // ==================== 4. 雙向連鎖磁吸引擎 ====================
@@ -1583,7 +1722,8 @@
             renderCanvasGridAndEvents();
             renderInspector();
 
-            if (cloudConfig.dbUrl && newRole !== 'admin') {
+            updateCloudSyncUI();
+            if (cloudConfig.apiBase && newRole !== 'admin') {
                 pollCloudUpdates();
             }
         }
@@ -3127,7 +3267,8 @@
                 currentDateId: state.currentDateId,
                 appMode: 'published',
                 defaultRole: 'teacher',
-                cloudConfig: cloudConfig.dbUrl ? { dbUrl: cloudConfig.dbUrl, projectId: cloudConfig.projectId } : null
+                // 只內嵌 API 網址與專案代碼，絕不內嵌管理者密碼
+                cloudConfig: cloudConfig.apiBase ? { apiBase: cloudConfig.apiBase, projectId: cloudConfig.projectId } : null
             };
             const docClone = document.documentElement.cloneNode(true);
             const embeddedScript = docClone.querySelector('#embedded-state-script');
@@ -3142,9 +3283,9 @@
             a.download = `index.html`;
             a.click();
             URL.revokeObjectURL(url);
-            showToast(cloudConfig.dbUrl
-                ? '已匯出 index.html（已內嵌雲端同步！傳上 Netlify 後永久免重新上傳）'
-                : '已匯出正式發布版網頁 (index.html)，可直接上傳 Netlify 或嵌入網站！');
+            showToast(cloudConfig.apiBase
+                ? '已匯出 index.html（離線也能開啟；連網時會自動讀取雲端最新賽程）'
+                : '已匯出正式發布版網頁 (index.html)');
         }
 
         function exportJsonData() {

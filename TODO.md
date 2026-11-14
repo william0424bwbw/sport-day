@@ -35,39 +35,39 @@
 ## 1. 步驟清單
 
 ### A. 一次性準備（只做一次）
-- [ ] 安裝 Node.js LTS（目前電腦上沒有；這台 Windows LTSC 沒有 winget）：到 https://nodejs.org 下載 **LTS 版 Windows Installer (.msi, x64)**，用預設選項安裝，裝完**完全關閉並重開 VS Code**，在 Git Bash 用 `node -v && npm -v` 確認
-- [ ] 註冊或登入 Cloudflare，在 Dashboard 右側記下 **Account ID**
-- [ ] 建立 **API Token**（My Profile → API Tokens → Create Custom Token），權限如下：
+- [x] 安裝 Node.js LTS（目前電腦上沒有；這台 Windows LTSC 沒有 winget）：到 https://nodejs.org 下載 **LTS 版 Windows Installer (.msi, x64)**，用預設選項安裝，裝完**完全關閉並重開 VS Code**，在 Git Bash 用 `node -v && npm -v` 確認
+- [x] 註冊或登入 Cloudflare，在 Dashboard 右側記下 **Account ID**
+- [x] 建立 **API Token**（My Profile → API Tokens → Create Custom Token），權限如下：
   - Account › **Workers Scripts** › Edit
   - Account › **D1** › Edit
   - Account › **Account Settings** › Read
   - User › **User Details** › Read
   - User › **Memberships** › Read
   - Account Resources：只勾自己的帳號
-- [ ] 產生一組管理者密碼 `ADMIN_TOKEN`（隨機字串，例如 `openssl rand -hex 24`）
-- [ ] 複製 `.env.example` 成 `.env`，填入上面三個值（`.env` **不可以 commit**）
+- [x] 產生一組管理者密碼 `ADMIN_TOKEN`（隨機字串，例如 `openssl rand -hex 24`）
+- [x] 複製 `.env.example` 成 `.env`，填入上面三個值（`.env` **不可以 commit**）
 
 ### B. 調整專案結構
-- [ ] 把 `index.html` 移到 `public/index.html`（`git mv index.html public/index.html`）
-- [ ] 依照「§2 樣板」新增這些檔案：`package.json`、`wrangler.jsonc`、`src/worker.js`、`migrations/0001_init.sql`、`.env.example`、`.gitignore`、`scripts/*.sh`、`.github/workflows/deploy.yml`
-- [ ] `npm install`
+- [x] 把 `index.html` 移到 `public/index.html`（`git mv index.html public/index.html`）
+- [x] 依照「§2 樣板」新增這些檔案：`package.json`、`wrangler.jsonc`、`src/worker.js`、`migrations/0001_init.sql`、`.env.example`、`.gitignore`、`scripts/*.sh`、`.github/workflows/deploy.yml`
+- [x] `npm install`
 
 ### C. 建立 Worker 與 D1（用腳本，一次性）
-- [ ] `bash scripts/bootstrap.sh`，會依序：
+- [x] `bash scripts/bootstrap.sh`，會依序：
   1. 建立 D1 資料庫 `sport-day-db`，並把 `database_id` 自動寫回 `wrangler.jsonc`
   2. 在遠端 D1 套用 migrations
   3. 第一次部署 Worker（Worker 會在這一步自動建立）
   4. 把 `ADMIN_TOKEN` 設成 Worker secret
-- [ ] commit 更新過的 `wrangler.jsonc`（只有 `database_id`，不是機密）
+- [x] commit 更新過的 `wrangler.jsonc`（只有 `database_id`，不是機密）
 
 ### D. 改寫前端同步邏輯（`public/index.html`）
-- [ ] 把 `getCloudEndpointUrl()` 改成同網域的 `/api/projects/<projectId>`
-- [ ] `pushLocalToCloudNow()`：PUT 時加上 `Authorization: Bearer <adminToken>` 標頭
-- [ ] `pollCloudUpdates()`：先打 `/version`，`updatedAt` 有變才 GET 完整資料
-- [ ] 「雲端同步設定」視窗：把 Firebase 網址欄位改成「管理者密碼」欄位（存在 localStorage，只有管理者需要填）
-- [ ] 部署在 Worker 上時，預設自動連線（不用再輸入網址）
-- [ ] 把 Lucide 鎖定版本，例如 `https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js`
-- [ ] （選做）把舊的 Firebase 資料匯出成 JSON，再用 `scripts/import-json.sh` 匯入 D1
+- [x] 把 `getCloudEndpointUrl()` 改成同網域的 `/api/projects/<projectId>`
+- [x] `pushLocalToCloudNow()`：PUT 時加上 `Authorization: Bearer <adminToken>` 標頭
+- [x] `pollCloudUpdates()`：先打 `/version`，`updatedAt` 有變才 GET 完整資料
+- [x] 「雲端同步設定」視窗：把 Firebase 網址欄位改成「管理者密碼」欄位（存在 localStorage，只有管理者需要填）
+- [x] 部署在 Worker 上時，預設自動連線（不用再輸入網址）
+- [x] 把 Lucide 鎖定版本，已鎖定 `lucide@1.66.0`，Tailwind 鎖定 `3.4.17`
+- [x] 把舊的 Firebase 資料搬到 D1（2026-11-14 完成：7 場地、5 日、33 筆賽程）
 
 ### E. CI/CD 自動部署
 - [ ] 在 GitHub repo → Settings → Secrets and variables → Actions 新增：
@@ -91,6 +91,8 @@
 ### G. 注意事項
 - [ ] D1 單一欄位上限約 **2 MB**。如果道次表附件用 base64 圖片存在 events 裡，資料會很快變大，之後建議把附件改存到 **R2**，D1 只存網址
 - [ ] 目前寫入權限只用一組共用密碼保護。如果之後需要多位管理者，可以考慮 Cloudflare Access
+- [ ] 停用舊 Firebase（`sportday-8d61c`）：目前規則是測試模式，任何人都能讀寫。確認大家都改用 Worker 網址後，把 Realtime Database 規則改成 `{".read": false, ".write": false}` 或刪除專案
+- [ ] Tailwind Play CDN、Google Fonts、unpkg 仍是外部服務；若要完全只靠 Cloudflare，可改成建置時產生 CSS，並把字型與圖示放進 `public/`
 
 ---
 
