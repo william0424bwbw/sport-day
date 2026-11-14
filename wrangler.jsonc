@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sport-day",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sport-day-db",
+      "database_id": "REPLACE_WITH_D1_ID", // bootstrap.sh 會自動填入
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+}
