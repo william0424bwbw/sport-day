@@ -60,3 +60,62 @@ export function firstDiff(a, b, path = '$') {
   }
   return `${path}: 不同`;
 }
+
+// WebSocket 測試用：連線並收集所有訊息，可用 next() 等待符合條件的訊息
+export function openSocket(url, { timeout = 5000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const messages = [];
+    const waiters = [];
+    const timer = setTimeout(() => { ws.close(); reject(new Error(`WebSocket 連線逾時：${url}`)); }, timeout);
+
+    ws.addEventListener('message', (ev) => {
+      const raw = typeof ev.data === 'string' ? ev.data : String(ev.data);
+      let data = raw;
+      try { data = JSON.parse(raw); } catch { /* 非 JSON，例如 pong */ }
+      messages.push(data);
+      for (const w of [...waiters]) w.check();
+    });
+    ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`WebSocket 連線失敗：${url}`)); });
+    ws.addEventListener('open', () => {
+      clearTimeout(timer);
+      resolve({
+        ws,
+        messages,
+        // 等待第一則符合條件的訊息（取出後從佇列移除）；逾時回傳 null
+        next(pred = () => true, ms = 3000) {
+          return new Promise((res) => {
+            let finished = false;
+            const waiter = {
+              check() {
+                if (finished) return;
+                const i = messages.findIndex(pred);
+                if (i < 0) return;
+                const [msg] = messages.splice(i, 1);
+                done(msg);
+              },
+            };
+            const t = setTimeout(() => done(null), ms);
+            function done(msg) {
+              finished = true;
+              clearTimeout(t);
+              const k = waiters.indexOf(waiter);
+              if (k >= 0) waiters.splice(k, 1);
+              res(msg);
+            }
+            waiters.push(waiter);
+            waiter.check();
+          });
+        },
+        close() {
+          return new Promise((res) => {
+            if (ws.readyState === WebSocket.CLOSED) return res();
+            const t = setTimeout(res, 2000);
+            ws.addEventListener('close', () => { clearTimeout(t); res(); });
+            ws.close();
+          });
+        },
+      });
+    });
+  });
+}

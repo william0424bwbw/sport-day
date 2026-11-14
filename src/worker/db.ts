@@ -1,9 +1,23 @@
-// @ts-nocheck -- 由 sub-agent 轉成正式 TypeScript（I3）
 // 賽程資料 <-> D1 資料表
 // 對外（API / 前端）仍是同一份 JSON：{ venues, dates, events }
 // 寫入時用 SQLite 的 json_each 在資料庫內拆解，每張表只需 1 條 SQL，
 // 不受「每條 SQL 最多 100 個參數」與「每次請求最多 50 條查詢」限制。
 // 欄位對應需與 migrations/0003_copy_json_to_tables.sql 一致。
+// 輸入檢查由共用的 Zod schema（src/shared/schema.ts）在 index.ts 處理，這裡只負責讀寫。
+import type { z } from 'zod';
+import type { projectDataSchema } from '../shared/schema.ts';
+
+/** 通過 projectDataSchema 檢查後的資料（id 已統一轉成字串） */
+export type ProjectDataParsed = z.output<typeof projectDataSchema>;
+
+/** GET /api/projects/:id 回傳的 JSON（由資料表組回，保留 extra 欄位） */
+export type JsonObject = Record<string, unknown>;
+export interface ProjectRecord {
+  venues: JsonObject[];
+  dates: JsonObject[];
+  events: JsonObject[];
+  updatedAt: number;
+}
 
 // ---------- 寫入 ----------
 // ?1 = projectId，?2 = 整份 JSON 字串
@@ -91,50 +105,49 @@ const WRITE_SQL = [
     WHERE e.type = 'object' AND a.type = 'object'`,
 ];
 
-// 檢查 payload：每筆資料要有 id，且同類型內不可重複（否則主鍵衝突、整次儲存失敗）
-export function validatePayload(body) {
-  if (!body || typeof body !== 'object') return 'payload 必須是物件';
-  if (!Array.isArray(body.events)) return 'events 必須是陣列';
-  for (const key of ['venues', 'dates']) {
-    if (body[key] !== undefined && !Array.isArray(body[key])) return `${key} 必須是陣列`;
-  }
-  const checkIds = (label, list) => {
-    const seen = new Set();
-    for (const item of list) {
-      if (!item || typeof item !== 'object') return `${label} 內有非物件的項目`;
-      const id = item.id;
-      if (typeof id !== 'string' && typeof id !== 'number') return `${label} 有項目缺少 id`;
-      if (seen.has(String(id))) return `${label} 的 id 重複：${id}`;
-      seen.add(String(id));
-    }
-    return null;
-  };
-  const slots = (body.dates || []).flatMap(d => (d && Array.isArray(d.commandSlots) ? d.commandSlots : []));
-  return checkIds('venues', body.venues || [])
-      || checkIds('dates', body.dates || [])
-      || checkIds('commandSlots', slots)
-      || checkIds('events', body.events);
-}
-
-export async function writeProject(db, projectId, body) {
+export async function writeProject(db: D1Database, projectId: string, body: ProjectDataParsed): Promise<number> {
   const updatedAt = Date.now();
+  // 其他頂層屬性（例如 currentDateId）屬於裝置畫面狀態，不寫入資料庫（與原本行為相同）
   const payload = JSON.stringify({
     venues: body.venues ?? [],
     dates: body.dates ?? [],
     events: body.events,
   });
-  const args = [projectId, payload, updatedAt];
+  const args: (string | number)[] = [projectId, payload, updatedAt];
   // batch = 單一交易：任何一條失敗就整批回復
-  await db.batch(WRITE_SQL.map(sql => db.prepare(sql).bind(...args.slice(0, maxParam(sql)))));
+  await db.batch(WRITE_SQL.map((sql) => db.prepare(sql).bind(...args.slice(0, maxParam(sql)))));
   return updatedAt;
 }
 
 // 每條 SQL 只綁定用到的參數（?1..?N），多綁會被 D1 視為錯誤
-function maxParam(sql) {
-  return Math.max(...[...sql.matchAll(/\?(\d+)/g)].map(m => Number(m[1])));
+function maxParam(sql: string): number {
+  return Math.max(...[...sql.matchAll(/\?(\d+)/g)].map((m) => Number(m[1])));
 }
 
 // ---------- 讀取 ----------
+type Cell = string | number | null;
+
+interface ProjectRow { updated_at: number }
+interface VenueRow { id: string; name: Cell; subtitle: Cell; extra: string | null }
+interface DayRow {
+  id: string; label: Cell; category: Cell; command_deck_enabled: Cell;
+  staff_hosts: Cell; staff_recorders: Cell; staff_stage_control: Cell; extra: string | null;
+}
+interface CommandSlotRow {
+  id: string; day_id: string; type: Cell; start_min: Cell; end_min: Cell;
+  staff: Cell; content: Cell; extra: string | null;
+}
+interface EventRow {
+  id: string; day_id: Cell; title: Cell; color: Cell; start_min: Cell; end_min: Cell;
+  check_in_offset_min: Cell; link_prev: Cell; volunteer_count: Cell; volunteer_task: Cell;
+  student_count: Cell; student_task: Cell; lane_note: Cell; actual_start_min: Cell;
+  actual_end_min: Cell; extra: string | null;
+}
+interface EventVenueRow { event_id: string; venue_id: string }
+interface RefereeRow { event_id: string; role: Cell; name: Cell; extra: string | null }
+interface EquipmentRow { event_id: string; item: Cell }
+interface AttachmentRow { event_id: string; name: Cell; type: Cell; data_url: Cell; extra: string | null }
+
 const READ_SQL = [
   `SELECT updated_at FROM projects WHERE id = ?1`,
   `SELECT * FROM venues            WHERE project_id = ?1 ORDER BY sort_order`,
@@ -148,40 +161,45 @@ const READ_SQL = [
 ];
 
 // 組物件：NULL 欄位不輸出（與原本 JSON「沒有這個屬性」一致），再併入 extra
-function build(fields, extra) {
-  const obj = {};
+function build(fields: Record<string, unknown>, extra?: string | null): JsonObject {
+  const obj: JsonObject = {};
   for (const [key, value] of Object.entries(fields)) {
     if (value !== null && value !== undefined) obj[key] = value;
   }
-  return extra ? { ...obj, ...JSON.parse(extra) } : obj;
+  return extra ? { ...obj, ...(JSON.parse(extra) as JsonObject) } : obj;
 }
-const bool = (v) => (v === null || v === undefined ? null : Boolean(v));
+const bool = (v: Cell | undefined): boolean | null => (v === null || v === undefined ? null : Boolean(v));
 
-function groupBy(rows, key) {
-  const map = new Map();
+function groupBy<T, K extends keyof T>(rows: T[], key: K): Map<T[K], T[]> {
+  const map = new Map<T[K], T[]>();
   for (const row of rows) {
-    if (!map.has(row[key])) map.set(row[key], []);
-    map.get(row[key]).push(row);
+    const list = map.get(row[key]);
+    if (list) list.push(row);
+    else map.set(row[key], [row]);
   }
   return map;
 }
 
-export async function readProject(db, projectId) {
-  const results = await db.batch(READ_SQL.map(sql => db.prepare(sql).bind(projectId)));
-  const [project, venues, days, slots, events, evVenues, referees, equipment, attachments] =
-    results.map(r => r.results);
+export async function readProject(db: D1Database, projectId: string): Promise<ProjectRecord | null> {
+  const results = await db.batch(READ_SQL.map((sql) => db.prepare(sql).bind(projectId)));
+  const rows = <T>(i: number): T[] => results[i].results as T[];
+  const project = rows<ProjectRow>(0);
   if (!project.length) return null;
+  const venues = rows<VenueRow>(1);
+  const days = rows<DayRow>(2);
+  const slots = rows<CommandSlotRow>(3);
+  const events = rows<EventRow>(4);
 
   const slotsByDay = groupBy(slots, 'day_id');
-  const venuesByEvent = groupBy(evVenues, 'event_id');
-  const refsByEvent = groupBy(referees, 'event_id');
-  const equipByEvent = groupBy(equipment, 'event_id');
-  const attsByEvent = groupBy(attachments, 'event_id');
+  const venuesByEvent = groupBy(rows<EventVenueRow>(5), 'event_id');
+  const refsByEvent = groupBy(rows<RefereeRow>(6), 'event_id');
+  const equipByEvent = groupBy(rows<EquipmentRow>(7), 'event_id');
+  const attsByEvent = groupBy(rows<AttachmentRow>(8), 'event_id');
 
   return {
-    venues: venues.map(v => build({ id: v.id, name: v.name, subtitle: v.subtitle }, v.extra)),
+    venues: venues.map((v) => build({ id: v.id, name: v.name, subtitle: v.subtitle }, v.extra)),
 
-    dates: days.map(d => {
+    dates: days.map((d) => {
       const staff = build({ hosts: d.staff_hosts, recorders: d.staff_recorders, stageControl: d.staff_stage_control });
       return build({
         id: d.id,
@@ -189,30 +207,30 @@ export async function readProject(db, projectId) {
         category: d.category,
         commandDeckEnabled: bool(d.command_deck_enabled),
         generalStaff: Object.keys(staff).length ? staff : null,
-        commandSlots: (slotsByDay.get(d.id) || []).map(s => build({
+        commandSlots: (slotsByDay.get(d.id) ?? []).map((s) => build({
           id: s.id, type: s.type, startMin: s.start_min, endMin: s.end_min, staff: s.staff, content: s.content,
         }, s.extra)),
       }, d.extra);
     }),
 
-    events: events.map(e => build({
+    events: events.map((e) => build({
       id: e.id,
       dateId: e.day_id,
-      venueIds: (venuesByEvent.get(e.id) || []).map(v => v.venue_id),
+      venueIds: (venuesByEvent.get(e.id) ?? []).map((v) => v.venue_id),
       startMin: e.start_min,
       endMin: e.end_min,
       checkInOffsetMin: e.check_in_offset_min,
       linkPrev: bool(e.link_prev),
       title: e.title,
       color: e.color,
-      referees: (refsByEvent.get(e.id) || []).map(r => build({ role: r.role, name: r.name }, r.extra)),
+      referees: (refsByEvent.get(e.id) ?? []).map((r) => build({ role: r.role, name: r.name }, r.extra)),
       volunteerCount: e.volunteer_count,
       volunteerTask: e.volunteer_task,
       studentCount: e.student_count,
       studentTask: e.student_task,
-      equipment: (equipByEvent.get(e.id) || []).map(q => q.item),
+      equipment: (equipByEvent.get(e.id) ?? []).map((q) => q.item),
       laneNote: e.lane_note,
-      attachments: (attsByEvent.get(e.id) || []).map(a => build({ name: a.name, type: a.type, dataUrl: a.data_url }, a.extra)),
+      attachments: (attsByEvent.get(e.id) ?? []).map((a) => build({ name: a.name, type: a.type, dataUrl: a.data_url }, a.extra)),
       actualStartMin: e.actual_start_min,
       actualEndMin: e.actual_end_min,
     }, e.extra)),
@@ -221,7 +239,7 @@ export async function readProject(db, projectId) {
   };
 }
 
-export async function readVersion(db, projectId) {
-  const row = await db.prepare('SELECT updated_at FROM projects WHERE id = ?1').bind(projectId).first();
+export async function readVersion(db: D1Database, projectId: string): Promise<number | null> {
+  const row = await db.prepare('SELECT updated_at FROM projects WHERE id = ?1').bind(projectId).first<ProjectRow>();
   return row?.updated_at ?? null;
 }

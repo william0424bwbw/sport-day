@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runApiTests } from './api.test.mjs';
+import { runApiTests, runRealtimeTests } from './api.test.mjs';
 import { sleep } from './lib.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,6 +61,7 @@ try {
   console.log(`  ✔ ${BASE}\n`);
 
   failed += await runApiTests({ base: BASE, token: TOKEN, snapshotFile });
+  failed += await runRealtimeTests({ base: BASE, token: TOKEN });
 } catch (err) {
   console.error('❌', err.message);
   failed += 1;

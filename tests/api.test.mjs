@@ -1,6 +1,6 @@
 // API 測試：驗證權限、輸入檢查，以及「寫進資料表再讀出來」與原始 JSON 相同
 import { readFileSync } from 'node:fs';
-import { canonical, createReporter, firstDiff } from './lib.mjs';
+import { canonical, createReporter, firstDiff, openSocket, sleep } from './lib.mjs';
 
 export async function runApiTests({ base, token, snapshotFile }) {
   console.log('▶ API 測試');
@@ -68,6 +68,96 @@ export async function runApiTests({ base, token, snapshotFile }) {
     const snapBack = await get('t-snapshot');
     const d = firstDiff(canonical(snap), canonical(snapBack));
     t.check(`正式資料快照來回相同（${snap.events.length} 筆賽程）`, !d, d || '');
+  }
+
+  return t.summary();
+}
+
+// 即時同步測試（§J）：Durable Object ProjectRoom 透過 WebSocket 推送
+export async function runRealtimeTests({ base, token }) {
+  console.log('▶ 即時同步（WebSocket）測試');
+  const t = createReporter('即時同步');
+  const wsBase = base.replace(/^http/, 'ws');
+  const project = `t-ws-${Date.now()}`;
+  const sample = { venues: [], dates: [], events: [{ id: 'ws-1', title: '即時同步測試' }] };
+  const put = (body, auth = token) => fetch(`${base}/api/projects/${project}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: `Bearer ${auth}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  const isType = (type) => (m) => m && typeof m === 'object' && m.type === type;
+  const sockets = [];
+  const open = async () => {
+    const s = await openSocket(`${wsBase}/api/projects/${project}/ws`);
+    sockets.push(s);
+    return s;
+  };
+
+  try {
+    // 非 WebSocket 請求、不合法的專案代碼
+    t.check('一般 GET /ws（非升級）→ 426', (await fetch(`${base}/api/projects/${project}/ws`)).status === 426);
+    t.check('不合法的專案代碼 /ws → 404', (await fetch(`${base}/api/projects/bad%20id/ws`)).status === 404);
+    let badRejected = false;
+    try {
+      const s = await openSocket(`${wsBase}/api/projects/bad%20id/ws`);
+      await s.close();
+    } catch {
+      badRejected = true;
+    }
+    t.check('不合法的專案代碼無法建立 WebSocket', badRejected);
+
+    // 尚未存在的專案：hello 的 updatedAt 為 null
+    const ghost = await openSocket(`${wsBase}/api/projects/${project}-none/ws`);
+    sockets.push(ghost);
+    const ghostHello = await ghost.next(isType('hello'));
+    t.check('不存在的專案 hello.updatedAt 為 null', ghostHello && ghostHello.updatedAt === null, JSON.stringify(ghostHello));
+    await ghost.close();
+
+    // 先寫入一次，連線後 hello 要帶目前版本號
+    const first = await (await put(sample)).json();
+    const a = await open();
+    const helloA = await a.next(isType('hello'));
+    t.check('連線後收到 hello，updatedAt 與 D1 一致',
+      helloA && helloA.updatedAt === first.updatedAt, JSON.stringify(helloA));
+    t.check('hello.online 為 1', helloA && helloA.online === 1, JSON.stringify(helloA));
+
+    // 心跳：ping → pong（由 setWebSocketAutoResponse 自動回覆）
+    a.ws.send('ping');
+    t.check('送出 ping 收到 pong', (await a.next((m) => m === 'pong')) === 'pong');
+
+    // 第二個裝置連線：線上人數變 2
+    const b = await open();
+    const helloB = await b.next(isType('hello'));
+    t.check('第二個連線 hello.online 為 2', helloB && helloB.online === 2, JSON.stringify(helloB));
+    const presence2 = await a.next((m) => isType('presence')(m) && m.online === 2);
+    t.check('第二個連線加入時，原連線收到 presence online=2', Boolean(presence2));
+
+    // 管理者 PUT：兩個裝置都收到 updated，版本號與 PUT 回傳相同
+    const putRes = await (await put({ ...sample, events: [{ id: 'ws-2', title: '更新後' }] })).json();
+    const [updA, updB] = await Promise.all([a.next(isType('updated')), b.next(isType('updated'))]);
+    t.check('PUT 後第一個連線收到 updated（版本號相同）',
+      updA && updA.updatedAt === putRes.updatedAt, JSON.stringify(updA));
+    t.check('PUT 後第二個連線收到 updated（版本號相同）',
+      updB && updB.updatedAt === putRes.updatedAt, JSON.stringify(updB));
+
+    // 沒有密碼的 PUT：不廣播
+    const unauth = await put(sample, null);
+    t.check('沒帶密碼 PUT → 401', unauth.status === 401);
+    const wrong = await put(sample, 'wrong');
+    t.check('錯誤密碼 PUT → 401', wrong.status === 401);
+    const bad = await put({ events: {} });
+    t.check('不合法的資料 PUT → 400', bad.status === 400);
+    t.check('未授權或不合法的 PUT 不會廣播', (await a.next(isType('updated'), 1000)) === null);
+
+    // 第二個裝置離線：線上人數變回 1
+    await b.close();
+    const presence1 = await a.next((m) => isType('presence')(m) && m.online === 1, 5000);
+    t.check('第二個連線離開後，原連線收到 presence online=1', Boolean(presence1));
+  } catch (err) {
+    t.check(`即時同步測試執行錯誤：${err.message}`, false);
+  } finally {
+    await Promise.all(sockets.map((s) => s.close()));
+    await sleep(100);
   }
 
   return t.summary();

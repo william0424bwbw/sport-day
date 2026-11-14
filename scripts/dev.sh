@@ -8,5 +8,5 @@ npx --no-install wrangler d1 migrations apply sport-day-db --local
 # Worker 需要 dist/ 存在才能啟動（實際前端由 Vite 提供）
 [ -f dist/index.html ] || npx --no-install vite build
 npx --no-install concurrently -k -n worker,web -c blue,green \
-  "wrangler dev --port 8787 --show-interactive-dev-session=false" \
+  "wrangler dev --ip 127.0.0.1 --port 8787 --show-interactive-dev-session=false" \
   "vite --port 5173"

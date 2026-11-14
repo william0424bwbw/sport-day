@@ -5,6 +5,8 @@
 #   bash scripts/test.sh --snapshot <檔案.json>  # API 測試另外用正式資料快照做來回測試
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Windows（Git Bash）：改用 C:/... 形式的路徑。/c/... 小寫磁碟代號會讓 Vitest 載入兩份而全部失敗
+if pwd -W >/dev/null 2>&1; then cd "$(pwd -W)"; fi
 
 QUICK=false
 API_ARGS=()

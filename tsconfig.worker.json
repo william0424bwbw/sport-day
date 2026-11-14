@@ -18,5 +18,7 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/worker", "src/shared"]
+  "include": ["src/worker", "src/shared"],
+  // 測試檔由 tsconfig.app.json（含 vite/client 型別）檢查
+  "exclude": ["src/**/*.test.ts"]
 }

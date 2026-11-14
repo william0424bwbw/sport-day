@@ -162,7 +162,7 @@ npx wrangler d1 execute sport-day-db --remote --command \
 |---|---|---|
 | 語言 | TypeScript | 前端、Worker 共用資料型別，改欄位時編輯器會指出所有要跟著改的地方 |
 | 框架 | **React 19** | 生態系最大，套件、範例、教學最多；之後找人接手或用 AI 協助維護都最容易 |
-| 建置 | **Vite** + `@cloudflare/vite-plugin` | 一個 `npm run dev` 同時跑前端與 Worker（含本機 D1、Durable Object），建置結果直接部署到 Workers |
+| 建置 | **Vite**（前端）+ wrangler（Worker） | Vite 建置到 `dist/`，由 Worker 靜態資源提供；`npm run dev` 同時啟動 wrangler dev（API、D1、Durable Object）與 Vite，`/api` 自動轉給 Worker。未採用 `@cloudflare/vite-plugin`，架構較單純、測試沿用 wrangler dev |
 | 不採用 Next.js | — | 這個專案幾乎都在瀏覽器裡運作、不需要 SEO；Next.js 要透過 OpenNext 轉接才能跑在 Workers 上，打包容易超過免費方案 3 MB 上限，PWA 較難做，大版本升級成本高 |
 | 狀態管理 | Zustand | 輕量，取代現在的全域 `state` 物件 |
 | 路由 | React Router（函式庫模式） | 單頁應用內的頁面切換，例如 `/day/:id`、`/event/:id` |
@@ -171,7 +171,7 @@ npx wrangler d1 execute sport-day-db --remote --command \
 | 圖示 | `lucide-react` | 只打包有用到的圖示 |
 | 字型 | 系統字型（蘋方、微軟正黑體） | 不載入數 MB 的網路字型，手機開啟更快 |
 | 資料檢查 | Zod（前端與 Worker 共用） | 一份 schema 同時用於型別、API 輸入檢查、匯入 JSON 檢查 |
-| Worker 路由 | Hono | 輕量，路由與中介層（權限檢查）寫法清楚 |
+| Worker 路由 | 自行撰寫（不用 Hono） | 路由只有幾條；當時鎖定的 Hono 版本有「中介層被繞過」的安全公告，修正版發布未滿兩週，因此不引入（2026-11-14） |
 | 即時同步 | **Durable Object + WebSocket**（取代每 4 秒輪詢，見 §J） | 有修改時伺服器主動推送，幾乎即時；沒有修改時不產生請求 |
 | 單元測試 | Vitest | 排程邏輯（磁吸、檢錄重疊、時間換算）與 Worker API |
 | 端對端測試 | Playwright | 取代自寫的 CDP 腳本，可同時測桌機與手機尺寸 |
@@ -188,7 +188,7 @@ src/
     schedule.ts      磁吸連動、檢錄重疊、延後後續賽程…（純函式，有單元測試）
     realtime.ts      WebSocket 訊息格式
   worker/
-    index.ts         Hono 路由、權限
+    index.ts         路由、權限
     db.ts            D1 讀寫（由現在的 src/db.js 轉成 TypeScript）
     project-room.ts  Durable Object：管理每場運動會的 WebSocket 連線與廣播
   web/
@@ -228,11 +228,11 @@ scripts/           *.sh（不變，部署前多一步 npm run build）
 - ~~匯出獨立分享網頁~~：改由 PWA 提供「安裝到手機、離線瀏覽」，不再匯出 HTML 檔（2026-11-14 決定）
 
 **階段與步驟**
-- [ ] I0. 決策與設計：手機版線框圖、功能對照表（現有 19 個功能區、6 個彈窗逐項列出，標記「保留 / 調整 / 刪除」）
-- [ ] I1. 工程骨架：Vite + React + TS + Tailwind + Cloudflare 外掛；ESLint、Prettier、Vitest、Playwright；更新 `scripts/*.sh` 與 `test.yml`
-- [ ] I2. 共用邏輯：把磁吸、檢錄重疊、時間換算等從舊檔案抽成 `src/shared/` 純函式，先寫「行為對照測試」確保結果和舊版一致
-- [ ] I3. 資料層：型別與 Zod schema、API client、同步服務、Zustand store；Worker 轉 TypeScript + Hono，現有 API 測試全部通過
-- [ ] I4. 即時同步：Durable Object + WebSocket（§J），新版一開始就用推送，不再實作輪詢
+- [x] I0. 決策與設計：手機版線框圖、功能對照表（現有 19 個功能區、6 個彈窗逐項列出，標記「保留 / 調整 / 刪除」）
+- [x] I1. 工程骨架：Vite + React + TS + Tailwind（Worker 由 wrangler 建置）；ESLint、Prettier、Vitest、Playwright；更新 `scripts/*.sh` 與 `test.yml`
+- [x] I2. 共用邏輯：把磁吸、檢錄重疊、時間換算等從舊檔案抽成 `src/shared/` 純函式，先寫「行為對照測試」確保結果和舊版一致
+- [x] I3. 資料層：型別與 Zod schema、API client、同步服務、Zustand store；Worker 轉 TypeScript，現有 API 測試全部通過
+- [x] I4. 即時同步：Durable Object + WebSocket（§J），新版一開始就用推送，不再實作輪詢
 - [ ] I5. 共用表單與檢視元件：賽程表單、場地／比賽日／司令台表單、細節面板，手機與電腦共用
 - [ ] I6. 手機版排版：今日總覽、賽程列表、單一場地時間軸（觸控拖曳）、底部導覽、全螢幕表單
 - [ ] I7. 電腦版排版：時間 × 場地格狀表、拖曳、右側細節面板
@@ -275,10 +275,10 @@ scripts/           *.sh（不變，部署前多一步 npm run build）
 **為什麼資料仍以 D1 為準**：D1 可以直接用 SQL 查詢與維護（§H），Durable Object 只負責「通知」，職責單純。之後若需要多位管理者同時編輯，再評估讓 Durable Object 負責合併修改。
 
 **步驟**
-- [ ] J1. `wrangler.jsonc` 新增 Durable Object 綁定與 migration（SQLite 型，免費方案可用）
-- [ ] J2. `ProjectRoom`：接受 WebSocket、Hibernation、廣播、心跳自動回應
-- [ ] J3. API：`GET /api/projects/:id/ws` 升級為 WebSocket；`PUT` 成功後通知廣播
-- [ ] J4. 前端 `realtime.ts`：連線、重連、退回輪詢的備援
+- [x] J1. `wrangler.jsonc` 新增 Durable Object 綁定與 migration（SQLite 型，免費方案可用）
+- [x] J2. `ProjectRoom`：接受 WebSocket、Hibernation、廣播、心跳自動回應
+- [x] J3. API：`GET /api/projects/:id/ws` 升級為 WebSocket；`PUT` 成功後通知廣播
+- [x] J4. 前端 `realtime.ts`：連線、重連、退回輪詢的備援
 - [ ] J5. 測試：兩個瀏覽器分頁，一邊修改、另一邊 1 秒內更新；中斷網路再恢復能補上更新
 - [ ] J6. 舊版前端在切換前仍使用輪詢（不另外改舊版）；新版上線後，`/version` 輪詢只剩備援用途
 
