@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "sport-day-db",
-      "database_id": "REPLACE_WITH_D1_ID", // bootstrap.sh 會自動填入
+      "database_id": "7b624344-a166-4c9f-ae5b-383f3690cd03", // bootstrap.sh 會自動填入
       "migrations_dir": "migrations"
     }
   ],
