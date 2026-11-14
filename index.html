@@ -1,0 +1,3234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小學運動會視覺化賽程排程系統</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts: Inter & Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <!-- 引入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+        }
+        /* 自訂捲軸樣式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* 時間格子 hover 提示 */
+        .slot-dropzone:hover {
+            background-color: rgba(59, 130, 246, 0.06);
+        }
+        .slot-drag-over {
+            background-color: rgba(59, 130, 246, 0.16) !important;
+            outline: 2px dashed #3b82f6;
+            outline-offset: -2px;
+        }
+        /* 檢錄灰色斜線緩衝區樣式（浮在最上層時增加柔和陰影） */
+        .checkin-buffer-zone {
+            background-color: rgba(241, 245, 249, 0.94);
+            background-image: repeating-linear-gradient(
+                -45deg,
+                rgba(148, 163, 184, 0.22),
+                rgba(148, 163, 184, 0.22) 6px,
+                rgba(241, 245, 249, 0.94) 6px,
+                rgba(241, 245, 249, 0.94) 12px
+            );
+            backdrop-filter: blur(2px);
+        }
+        .checkin-overlap-zone {
+            background-color: rgba(254, 243, 199, 0.95);
+            background-image: repeating-linear-gradient(
+                -45deg,
+                rgba(245, 158, 11, 0.28),
+                rgba(245, 158, 11, 0.28) 6px,
+                rgba(255, 251, 235, 0.95) 6px,
+                rgba(255, 251, 235, 0.95) 12px
+            );
+            box-shadow: 0 4px 12px -2px rgba(245, 158, 11, 0.35);
+            backdrop-filter: blur(3px);
+        }
+        /* 上下邊緣拉伸手把 */
+        .resize-handle-top, .resize-handle-bottom {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .event-card-item:hover .resize-handle-top,
+        .event-card-item:hover .resize-handle-bottom,
+        .event-card-selected .resize-handle-top,
+        .event-card-selected .resize-handle-bottom {
+            opacity: 1;
+        }
+        /* 進行中整張賽程方塊呼吸燈發光效果（體貼老師視覺清晰度） */
+        @keyframes liveCardPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.45), 0 8px 20px -4px rgba(244, 63, 94, 0.28);
+            }
+            50% {
+                box-shadow: 0 0 0 5px rgba(244, 63, 94, 0.8), 0 12px 26px -2px rgba(244, 63, 94, 0.42);
+            }
+        }
+        .live-card-pulse {
+            animation: liveCardPulse 1.8s infinite ease-in-out;
+        }
+        /* A4 公文細流列印樣式 */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #rundownPrintArea, #rundownPrintArea * {
+                visibility: visible;
+            }
+            #rundownPrintArea {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
+
+    <!-- ==================== 頂部全域導覽與角色權限切換列 ==================== -->
+    <header class="bg-white border-b border-slate-200 px-3 sm:px-5 py-2.5 flex items-center justify-between gap-2 shrink-0 z-30 shadow-sm">
+        <!-- 左側品牌標題 -->
+        <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <i data-lucide="calendar-range" class="w-5 h-5"></i>
+            </div>
+            <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">小學運動會視覺化賽程排程系統</h1>
+                    <span id="cloudStatusBadge" onclick="openCloudSyncModal()" title="點擊設定或查看雲端即時同步狀態" class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> 單機儲存
+                    </span>
+                </div>
+                <p class="text-[11px] text-slate-500 hidden md:block">單一資料源 × 多視角權限渲染 × 雙向磁吸與雲端即時同步</p>
+            </div>
+        </div>
+
+        <!-- 中間：角色視角切換器 -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0" id="roleSwitcherContainer">
+            <button onclick="switchRole('admin')" id="role-btn-admin" class="role-btn flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-blue-600 shadow-sm">
+                <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+                <span>管理者<span class="hidden lg:inline">（編輯）</span></span>
+            </button>
+            <button onclick="switchRole('staff')" id="role-btn-staff" class="role-btn flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900">
+                <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>
+                <span>工作人員<span class="hidden lg:inline">（完整細節）</span></span>
+            </button>
+            <button onclick="switchRole('teacher')" id="role-btn-teacher" class="role-btn flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                <span>導師<span class="hidden lg:inline">（精簡視角）</span></span>
+            </button>
+        </div>
+
+        <!-- 右側：雲端同步、細流輸出、場地管理、發布切換 -->
+        <div class="flex items-center gap-1.5 shrink-0" id="topRightControls">
+            <!-- 雲端即時同步設定按鈕（解決 Netlify 重新上傳痛點） -->
+            <button onclick="openCloudSyncModal()" id="btn-cloud-sync" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition-colors" title="接上免費 Firebase 即時資料庫，改完賽程全校手機自動同步，免重新上傳">
+                <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
+                <span class="hidden xl:inline">雲端同步</span>
+            </button>
+
+            <!-- 管理者專屬工具組 -->
+            <button onclick="openVenueManagerModal()" id="btn-manage-venues" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-colors" title="新增、刪除或修改場地名稱">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                <span class="hidden xl:inline">管理場地</span>
+            </button>
+            <button onclick="openRundownModal()" id="btn-export-rundown" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors" title="從排程細節一鍵生成現代化公文與 Excel 細流表">
+                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+                <span class="hidden lg:inline">輸出細流表</span>
+            </button>
+
+            <!-- 演示測試版 / 正式發布版 切換 -->
+            <button onclick="toggleAppMode()" id="btn-toggle-mode" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-colors" title="切換「演示測試版（含時間快轉器）」或「正式發布版（真實時鐘）」">
+                <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+                <span id="appModeLabel">演示測試版</span>
+            </button>
+            <button onclick="exportStandaloneHtml()" id="btn-export-html" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors" title="匯出為單一網頁檔，可直接上傳 Netlify 或嵌入網站">
+                <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+                <span class="hidden md:inline">匯出分享網頁</span>
+            </button>
+            <button onclick="exportJsonData()" id="btn-export-json" class="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors" title="下載 JSON 備份檔">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="document.getElementById('importJsonInput').click()" id="btn-import-json" class="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors" title="匯入 JSON 備份檔還原">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            </button>
+            <input type="file" id="importJsonInput" accept=".json" class="hidden" onchange="importJsonData(event)">
+        </div>
+    </header>
+
+    <!-- ==================== 主工作區：三欄式架構 (Left + Center + Right) ==================== -->
+    <div class="flex-1 flex min-h-0 overflow-hidden">
+
+        <!-- 1. 左欄：賽程日期分類導航樹 -->
+        <aside id="leftSidebar" class="w-52 sm:w-56 bg-white border-r border-slate-200 flex flex-col shrink-0 z-20 min-h-0">
+            <div class="p-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">賽程日期分類</span>
+                <button onclick="openAddDateModal()" id="btn-add-date" class="text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors" title="新增賽程日期">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- 日期樹狀選單容器 -->
+            <div class="flex-1 overflow-y-auto p-2.5 space-y-4 min-h-0" id="dateTreeContainer"></div>
+
+            <!-- 左下角：當前視角說明卡片 -->
+            <div class="p-3 border-t border-slate-100 bg-slate-50/80 shrink-0">
+                <div id="roleHintCard" class="rounded-xl p-2.5 bg-blue-50/80 border border-blue-100 text-[11px] leading-relaxed text-blue-800"></div>
+            </div>
+        </aside>
+
+        <!-- 2. 中欄：視覺化時間軸排程主畫布 -->
+        <main class="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-50/70 relative">
+
+            <!-- 畫布頂部控制列 -->
+            <div class="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <!-- 左側：當前日期標題 ＋ 情境啟用司令台中控按鈕 -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span id="currentDateBadge" class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-100 text-indigo-700">運動會正式賽</span>
+                    <h2 id="currentDateTitle" class="text-base font-bold text-slate-900">12/19 (六) 運動會正式賽</h2>
+                    <span id="eventCountBadge" class="text-xs text-slate-400 font-medium">0 個項目</span>
+
+                    <!-- 情境按需啟用：僅當本日尚未開啟司令台中控層時，於管理者模式顯示低調啟用鈕 -->
+                    <button id="btn-enable-command-deck" onclick="enableCommandDeckForCurrentDate()" class="hidden items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-700 border border-slate-200 hover:border-amber-200 text-xs font-semibold transition-colors" title="為本日開啟置頂司令台播報與穿插頒獎中控列">
+                        <i data-lucide="mic" class="w-3.5 h-3.5 text-amber-500"></i>
+                        <span>+ 啟用司令台中控</span>
+                    </button>
+                </div>
+
+                <!-- 中間：織浪同款「動態時間線」控制器（僅演示測試版顯示） -->
+                <div id="liveTimeSimulatorBar" class="flex items-center gap-1.5 bg-rose-50/90 border border-rose-200 px-2.5 py-1 rounded-xl">
+                    <span class="flex items-center gap-1 text-[11px] font-bold text-rose-700">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                        時間線
+                    </span>
+                    <select id="timeModeSelect" onchange="changeTimeMode(this.value)" class="text-[11px] font-bold bg-white border border-rose-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none">
+                        <option value="sim" selected>模擬現場時間</option>
+                        <option value="real">系統真實時鐘</option>
+                    </select>
+                    <div id="simTimeControls" class="flex items-center gap-1">
+                        <button onclick="adjustSimTime(-10)" class="px-1.5 py-0.5 bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[11px] font-bold" title="倒退 10 分鐘">-10m</button>
+                        <span id="currentLiveTimeLabel" class="px-1.5 text-xs font-mono font-bold text-rose-700">10:10</span>
+                        <button onclick="adjustSimTime(10)" class="px-1.5 py-0.5 bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[11px] font-bold" title="前進 10 分鐘">+10m</button>
+                        <button id="btnAutoPlaySim" onclick="toggleAutoPlaySim()" class="ml-1 flex items-center gap-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors" title="每 5 秒自動推進 10 分鐘，模擬現場比賽進行">
+                            <i data-lucide="play" class="w-3 h-3"></i>
+                            <span>快轉(5s=10m)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 右側：管理者「拖曳新增項目」模組來源 -->
+                <div id="adminDraggableToolbox" class="flex items-center gap-2">
+                    <span class="text-[11px] text-slate-400 hidden xl:inline">拖拉積木或雙擊時間格新增：</span>
+                    <div id="newEventDraggableSource" draggable="true" ondragstart="handleToolboxDragStart(event)" class="cursor-grab active:cursor-grabbing flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm hover:shadow-md transition-all">
+                        <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-blue-200"></i>
+                        <i data-lucide="plus-square" class="w-3.5 h-3.5"></i>
+                        <span>拖曳新增項目</span>
+                    </div>
+                    <button onclick="clearCurrentDateEvents()" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="清空本日所有排程">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- 非管理者唯讀提示 -->
+                <div id="readOnlyBanner" class="hidden flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-600">
+                    <i data-lucide="lock" class="w-3.5 h-3.5 text-slate-400"></i>
+                    <span>唯讀檢視中：點擊賽程方塊可看細節與道次表</span>
+                </div>
+            </div>
+
+            <!-- 雙模態聚焦過濾列：導師端顯示「年級積木」，管理/工作人員顯示「人員與裁判積木」 -->
+            <div id="personFilterBar" class="bg-white/95 border-b border-slate-200 px-4 py-1.5 flex items-center gap-2 shrink-0 overflow-x-auto"></div>
+
+            <!-- ==================== 最高層級置頂層：司令台中控列（情境按需啟用，浮在所有場地賽程之上） ==================== -->
+            <div id="commandDeckContainer" class="hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-2 border-b border-indigo-800/80 shadow-md shrink-0 z-20">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[11px] font-bold">
+                            <i data-lucide="mic" class="w-3 h-3"></i> 司令台中控置頂層
+                        </span>
+                        <span class="text-[11px] text-slate-300 hidden sm:inline">浮動於賽程上方｜司儀換班、比賽進行中穿插頒獎與成績播報</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-add-command-slot" onclick="openCommandSlotModal()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold shadow-sm transition-colors">
+                            <i data-lucide="plus" class="w-3 h-3"></i> 新增播報/頒獎
+                        </button>
+                        <button id="btn-disable-command-deck" onclick="disableCommandDeckForCurrentDate()" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-rose-500/30 text-slate-300 hover:text-rose-200 text-[11px] font-medium transition-colors" title="本日不需要司令台中控，收起此區塊">
+                            <i data-lucide="x" class="w-3 h-3"></i>
+                            <span class="hidden md:inline">關閉中控層</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- 司令台時段任務橫向膠囊列 -->
+                <div id="commandSlotsList" class="flex items-center gap-2 overflow-x-auto pb-0.5"></div>
+            </div>
+
+            <!-- 時間軸 + 場地欄位捲動容器 -->
+            <div class="flex-1 overflow-auto relative min-h-0" id="timelineScrollArea">
+                <div class="min-w-[960px] flex flex-col">
+
+                    <!-- 場地欄位表頭 (Sticky Top，動態渲染支援自由增刪改) -->
+                    <div class="sticky top-0 z-20 flex bg-white border-b border-slate-200 shadow-sm">
+                        <div class="w-16 shrink-0 py-2.5 px-2 text-center text-[11px] font-bold text-slate-400 border-r border-slate-200 bg-slate-50/90 sticky left-0 z-30">
+                            時間
+                        </div>
+                        <div id="venuesHeaderRow" class="flex-1 grid"></div>
+                    </div>
+
+                    <!-- 時間網格主體（每 10 分鐘一格，07:30 ~ 16:30） -->
+                    <div class="flex relative" id="timelineGridWrapper">
+                        <!-- 左側時間刻度軸 (每 30 分鐘顯示標籤，Sticky Left) -->
+                        <div class="w-16 shrink-0 bg-white border-r border-slate-200 relative sticky left-0 z-10" id="timeAxisLabels"></div>
+
+                        <!-- 場地背景格子層 + 懸浮賽程方塊層 -->
+                        <div class="flex-1 relative" id="venuesCanvasContainer">
+                            <!-- 背景格子（每 10 分鐘一格） -->
+                            <div id="venuesGridColumns" class="grid h-full"></div>
+
+                            <!-- 賽程方塊覆蓋層（支援跨場地合併與檢錄灰色重疊緩衝區） -->
+                            <div id="eventsOverlayLayer" class="absolute inset-0 pointer-events-none"></div>
+
+                            <!-- 織浪同款：紅色即時動態時間線 (貫穿全場地) -->
+                            <div id="liveNowIndicatorLine" class="hidden absolute left-0 right-0 z-40 pointer-events-none flex items-center" style="top: 0px;">
+                                <div class="w-2.5 h-2.5 rounded-full bg-rose-600 -ml-1.5 shadow ring-2 ring-white"></div>
+                                <div class="flex-1 h-[2px] bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>
+                                <span id="liveLineBadge" class="mr-2 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-mono font-bold shadow">10:10 LIVE</span>
+                            </div>
+
+                            <!-- 空白狀態引導提示 -->
+                            <div id="emptyCanvasHint" class="hidden absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-6">
+                                <div class="bg-white/95 backdrop-blur-sm border border-dashed border-slate-300 rounded-2xl p-6 text-center max-w-sm shadow-sm pointer-events-auto">
+                                    <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                                        <i data-lucide="mouse-pointer-click" class="w-6 h-6"></i>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-slate-800 mb-1">本日畫布目前為空白狀態</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                                        您可以直接從右上角拖拉「<b>拖曳新增項目</b>」進任意時間格，或<b>雙擊</b>空白時間格建立賽程。
+                                    </p>
+                                    <button onclick="restoreBlackboardSample()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 text-xs font-semibold transition-colors">
+                                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                                        <span>重新載入黑板完整範例資料</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+
+        <!-- 3. 右欄：Google 雲端式動態細節抽屜（未點選方塊時完全隱藏；min-h-0 確保可順暢上下捲動） -->
+        <aside id="rightInspector" class="hidden w-80 sm:w-96 bg-white border-l border-slate-200 flex-col shrink-0 z-20 shadow-lg min-h-0 h-full overflow-hidden">
+            <!-- 細節編輯 / 檢視動態內容區 -->
+            <div id="inspectorContent" class="flex-1 flex flex-col min-h-0 h-full overflow-hidden"></div>
+        </aside>
+
+    </div>
+
+    <!-- ==================== 彈窗 1：免費雲端即時同步設定 (Firebase Realtime Database) ==================== -->
+    <div id="cloudSyncModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+                        <i data-lucide="cloud" class="w-4 h-4"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-900">雲端即時資料庫同步（免重新上傳網頁）</h3>
+                </div>
+                <button onclick="closeCloudSyncModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="bg-sky-50/80 border border-sky-100 rounded-xl p-3.5 mb-4 text-xs text-sky-900 leading-relaxed space-y-1.5">
+                <p class="font-bold">為什麼需要這個設定？</p>
+                <p>只要綁定一組免費的 Google Firebase 資料庫網址，之後您把「匯出分享網頁」傳上 Netlify 後，<b>您在管理端修改任何時間、順延賽程或上傳道次表，全校老師手機上的網頁 1 秒內自動同步更新</b>，再也不用每次重新匯出上傳！</p>
+            </div>
+
+            <div class="space-y-3 mb-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Firebase Realtime Database 網址 (URL)</label>
+                    <input type="url" id="cloudDbUrlInput" placeholder="例如：https://my-sports-day-default-rtdb.firebaseio.com" class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <p class="text-[11px] text-slate-400 mt-1">留空並儲存則切回「本機瀏覽器儲存」模式。</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">運動會專案代碼（多場活動區隔用）</label>
+                    <input type="text" id="cloudProjectIdInput" value="school-sports-115" placeholder="school-sports-115" class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+            </div>
+
+            <!-- 30 秒申請教學摺疊區 -->
+            <details class="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600">
+                <summary class="font-bold text-slate-800 cursor-pointer">📖 30 秒免費取得 Firebase 網址教學（免信用卡）</summary>
+                <ol class="list-decimal list-inside mt-2 space-y-1 text-[11px] leading-relaxed">
+                    <li>前往 <b>console.firebase.google.com</b> 用 Google 帳號登入並「新增專案」。</li>
+                    <li>左側選單點選「建構 (Build)」➔「<b>Realtime Database</b>」➔「建立資料庫」。</li>
+                    <li>安全規則選擇「<b>以測試模式啟動 (Start in test mode)</b>」並按下啟用。</li>
+                    <li>複製畫面上方那串 <code class="bg-white px-1 py-0.5 rounded border">https://xxxx.firebaseio.com</code> 網址貼回上方即可！</li>
+                </ol>
+            </details>
+
+            <div id="cloudSyncTestResult" class="hidden mb-3 p-2.5 rounded-xl text-xs font-semibold"></div>
+
+            <div class="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-100">
+                <button onclick="pushLocalToCloudNow()" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors">
+                    立即上傳本機資料至雲端
+                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeCloudSyncModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">取消</button>
+                    <button onclick="saveCloudSyncSettings()" class="px-4 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-sm">儲存並連線</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 2：管理場地（新增 / 刪除 / 編輯場地名稱） ==================== -->
+    <div id="venueManagerModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between mb-2 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                        <i data-lucide="map-pin" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900">管理場地欄位</h3>
+                        <p class="text-[11px] text-slate-500">可自由新增場地、刪除不需要的場地，或修改各校專屬場地名稱</p>
+                    </div>
+                </div>
+                <button onclick="closeVenueManagerModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div id="venueManagerList" class="flex-1 overflow-y-auto space-y-2.5 my-3 pr-1 min-h-0"></div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                <button onclick="addNewVenue()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-colors">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> 新增一個場地欄位
+                </button>
+                <button onclick="closeVenueManagerModal()" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-colors">
+                    完成並套用
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 3：司令台中控任務編輯 (播報換班 / 比賽中穿插頒獎) ==================== -->
+    <div id="commandSlotModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                        <i data-lucide="mic" class="w-4 h-4"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-900" id="commandModalTitle">設定司令台中控任務</h3>
+                </div>
+                <button onclick="closeCommandSlotModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3.5 mb-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">任務類型</label>
+                    <select id="cmdTypeInput" class="w-full px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50">
+                        <option value="award">🏆 穿插頒獎（比賽進行中頒發前項獎牌）</option>
+                        <option value="host">🎙️ 司儀播報 / 主持人輪班</option>
+                        <option value="record">📋 成績公告 / 獎狀印製進度</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">開始時間</label>
+                        <input type="text" id="cmdStartInput" placeholder="例如 09:30" class="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">結束時間</label>
+                        <input type="text" id="cmdEndInput" placeholder="例如 10:30" class="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">負責人員 / 輪班主持人</label>
+                    <input type="text" id="cmdStaffInput" placeholder="例如：佩琳、珠芸（10:00換盈汝）" class="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">頒獎項目 / 播報重點內容</label>
+                    <textarea id="cmdContentInput" rows="2" placeholder="例如：頒發會前賽跳高、跳遠前六名（請得獎選手至司令台右側集合）" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"></textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center gap-2">
+                <button id="btnDeleteCmdSlot" onclick="deleteCurrentCommandSlot()" class="hidden px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors">
+                    刪除此時段
+                </button>
+                <div class="flex justify-end gap-2 ml-auto">
+                    <button onclick="closeCommandSlotModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">取消</button>
+                    <button onclick="saveCommandSlot()" class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm">儲存設定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 4：新增賽程日期 ==================== -->
+    <div id="addDateModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <h3 class="text-base font-bold text-slate-900 mb-1">新增賽程日期</h3>
+            <p class="text-xs text-slate-500 mb-4">建立新的會前賽或運動會日程分類</p>
+            <div class="space-y-3 mb-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">大方向階段分類</label>
+                    <select id="newDateCategory" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="會前賽">會前賽</option>
+                        <option value="運動會正式賽">運動會正式賽</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">日期與名稱（例如：12/20 補賽日）</label>
+                    <input type="text" id="newDateLabel" placeholder="12/20 (日) 雨天備案補賽" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeAddDateModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">取消</button>
+                <button onclick="confirmAddDate()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm">新增日期</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 5：道次表 / 選手名單附件全螢幕預覽 ==================== -->
+    <div id="attachmentPreviewModal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+                    <h3 id="previewModalTitle" class="text-sm font-bold text-slate-800">道次表與選手名單預覽</h3>
+                </div>
+                <button onclick="closeAttachmentPreview()" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="previewModalBody" class="flex-1 overflow-auto p-4 bg-slate-900 flex items-center justify-center min-h-[300px]"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈窗 6：現代化運動會細流表生成與輸出視窗 ==================== -->
+    <div id="rundownModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6">
+        <div class="bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <!-- 頂部操作列 -->
+            <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3 no-print shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">運動會賽務細流表（自動彙整檢錄、裁判分工、公差與器材）</h3>
+                        <p class="text-[11px] text-slate-500">已將複雜參數模組化排版，可直接另存 A4 PDF 會議公文或匯出 Excel (.csv)</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <!-- 切換僅看本日 / 全部日期 -->
+                    <div class="flex bg-slate-200/80 p-0.5 rounded-xl text-xs font-bold">
+                        <button onclick="setRundownScope('current')" id="rundown-scope-current" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-xs">僅看本日</button>
+                        <button onclick="setRundownScope('all')" id="rundown-scope-all" class="px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900">全部日期</button>
+                    </div>
+                    <button onclick="exportRundownCsv()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors">
+                        <i data-lucide="table" class="w-3.5 h-3.5"></i>
+                        <span>匯出 Excel (.csv)</span>
+                    </button>
+                    <button onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-colors">
+                        <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                        <span>列印 / 另存 A4 PDF</span>
+                    </button>
+                    <button onclick="closeRundownModal()" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-800">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 細流預覽與列印內容區 -->
+            <div id="rundownPrintArea" class="flex-1 overflow-y-auto p-6 sm:p-8 bg-white space-y-8 min-h-0"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 提示訊息 Toast ==================== -->
+    <div id="toastNotification" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-xl flex items-center gap-2 opacity-0 pointer-events-none transition-all duration-300 z-50">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastMessage">已儲存變更</span>
+    </div>
+
+    <!-- ==================== 內嵌預設資料與互動邏輯腳本 ==================== -->
+    <script id="embedded-state-script" type="application/json">null</script>
+
+    <script>
+        // ==================== 1. 系統常數與預設資料架構 ====================
+        const START_HOUR = 7;
+        const END_HOUR = 17;
+        const STEP_MINUTES = 10;   // 精細網格單位：每 10 分鐘一格
+        const SLOT_HEIGHT = 20;    // 每 10 分鐘高度 20px (1 小時 = 120px)
+        const STORAGE_KEY = 'school_sports_day_scheduler_v9';
+        const CLOUD_CFG_KEY = 'school_sports_day_cloud_cfg_v1';
+
+        const DEFAULT_VENUES = [
+            { id: 'A', name: 'A 跑道區', subtitle: '100M / 60M / 接力' },
+            { id: 'B', name: 'B 跳高/壘球', subtitle: '跳高墊 / 壘球擲遠' },
+            { id: 'C', name: 'C 球場/草皮', subtitle: '網球趣味 / 壘球' },
+            { id: 'D', name: 'D 跳遠沙坑', subtitle: '男/女跳遠決賽' },
+            { id: 'E', name: 'E 綜合活動區', subtitle: '立定跳遠 / 趣味' },
+            { id: 'M', name: '中 司令台前', subtitle: '特教 / 閉幕' },
+            { id: 'S', name: '台 司令台上', subtitle: '頒獎典禮 / 播報' }
+        ];
+
+        const GRADE_BLOCKS = [
+            { id: '一年級', label: '一年級', keywords: ['一年級', '一立定', '一網', '一全'] },
+            { id: '二年級', label: '二年級', keywords: ['二年級', '二立定', '二對', '二全'] },
+            { id: '三年級', label: '三年級', keywords: ['三年級', '三立定', '三網'] },
+            { id: '四年級', label: '四年級', keywords: ['四年級', '四立定', '四壘'] },
+            { id: '五年級', label: '五年級', keywords: ['五年級', '五壘', '五、六年級'] },
+            { id: '六年級', label: '六年級', keywords: ['六年級', '六壘', '五、六年級'] },
+            { id: '特教', label: '特教班', keywords: ['特教'] },
+            { id: '全校', label: '全校 / 親師', keywords: ['預演', '閉幕', '親師', '開幕'] }
+        ];
+
+        const COLOR_THEMES = {
+            blue:   { border: 'border-blue-500',    bg: 'bg-gradient-to-b from-blue-50/95 to-blue-100/75',       text: 'text-blue-950',    badge: 'bg-blue-600 text-white' },
+            emerald:{ border: 'border-emerald-500', bg: 'bg-gradient-to-b from-emerald-50/95 to-emerald-100/75', text: 'text-emerald-950', badge: 'bg-emerald-600 text-white' },
+            amber:  { border: 'border-amber-500',   bg: 'bg-gradient-to-b from-amber-50/95 to-amber-100/75',     text: 'text-amber-950',   badge: 'bg-amber-600 text-white' },
+            rose:   { border: 'border-rose-500',    bg: 'bg-gradient-to-b from-rose-50/95 to-rose-100/75',       text: 'text-rose-950',    badge: 'bg-rose-600 text-white' },
+            purple: { border: 'border-purple-500',  bg: 'bg-gradient-to-b from-purple-50/95 to-purple-100/75',   text: 'text-purple-950',  badge: 'bg-purple-600 text-white' }
+        };
+
+        const EQUIPMENT_PRESETS = [
+            '起跑架 + 發令槍(起+終)',
+            '立定跳遠墊 x8組',
+            '跳高墊 + 橫桿 + 丈量尺',
+            '跳遠沙坑耙子 + 皮尺',
+            '壘球 + 標誌盤',
+            '網球趣味器材 x2組',
+            '大隊接力棒 + 號碼背心',
+            '計時碼表 + 名次牌 + 紀錄夾'
+        ];
+
+        const REFEREE_ROLE_PRESETS = [
+            '裁判長',
+            '丈量',
+            '叫人/檢錄',
+            '發令',
+            '終點判定',
+            '紀錄成績'
+        ];
+
+        const DEFAULT_DATES = [
+            { id: '12-14', category: '會前賽', label: '12/14 (一) 立定跳遠', commandDeckEnabled: false, generalStaff: { hosts: '佩琳、珠芸、盈汝(暫定)', recorders: '美蓉、郁婷、逸軒', stageControl: '合萍｜拍照：志工*2' }, commandSlots: [] },
+            { id: '12-16', category: '會前賽', label: '12/16 (三) 壘球擲遠', commandDeckEnabled: false, generalStaff: { hosts: '佩琳、珠芸、盈汝(暫定)', recorders: '美蓉、郁婷、逸軒', stageControl: '合萍｜拍照：志工*2' }, commandSlots: [] },
+            { id: '12-17', category: '會前賽', label: '12/17 (四) 跳高/跳遠/網球', commandDeckEnabled: false, generalStaff: { hosts: '佩琳、珠芸、盈汝(暫定)', recorders: '美蓉、郁婷、逸軒', stageControl: '合萍｜拍照：志工*2' }, commandSlots: [] },
+            { id: '12-18', category: '會前賽', label: '12/18 (五) 總預演與預賽', commandDeckEnabled: false, generalStaff: { hosts: '佩琳、珠芸、盈汝(暫定)', recorders: '美蓉、郁婷', stageControl: '合萍｜拍照：志工*3' }, commandSlots: [] },
+            {
+                id: '12-19',
+                category: '運動會正式賽',
+                label: '12/19 (六) 運動會正式賽',
+                commandDeckEnabled: true,
+                generalStaff: { hosts: '佩琳、珠芸、盈汝', recorders: '美蓉、郁婷、逸軒', stageControl: '合萍｜大會總場控' },
+                commandSlots: [
+                    { id: 'cmd-1', type: 'host', startMin: 540, endMin: 630, staff: '佩琳、珠芸（早班播報）', content: '開幕後徑賽決賽即時播報、提醒各班檢錄動態' },
+                    { id: 'cmd-2', type: 'award', startMin: 570, endMin: 620, staff: '校長、家長會長｜獎狀組：郁婷', content: '🏆 比賽進行中穿插頒獎：會前賽跳高、跳遠、壘球前六名' },
+                    { id: 'cmd-3', type: 'host', startMin: 630, endMin: 750, staff: '盈汝（接手播報）', content: '低年級趣味競賽、五六年級大隊接力氣氛帶動與成績播報' },
+                    { id: 'cmd-4', type: 'award', startMin: 730, endMin: 770, staff: '教務主任、學務主任', content: '🏆 頒發低年級趣味競賽優勝、五六年級大隊接力前三名' }
+                ]
+            }
+        ];
+
+        function buildBlackboardSampleEvents() {
+            return [
+                // 12/14
+                { id: 'bb-14-1', dateId: '12-14', venueIds: ['E'], startMin: 470, endMin: 580, checkInOffsetMin: 20, linkPrev: false, title: '二年級 立定跳遠 (全體)', color: 'purple', referees: [{ role: '裁判長', name: '張老師' }, { role: '丈量', name: '李老師' }, { role: '叫人/檢錄', name: '二年級導師' }], volunteerCount: 2, volunteerTask: '協助整隊與起跳線引導', studentCount: 8, studentTask: '4組輪流拉皮尺、撫平墊子', equipment: ['立定跳遠墊 x8組', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '分 4 站同時測驗，每人跳 2 次取最佳成績', attachments: [] },
+                { id: 'bb-14-2', dateId: '12-14', venueIds: ['E'], startMin: 470, endMin: 580, checkInOffsetMin: 20, linkPrev: false, title: '三年級 立定跳遠 (全體)', color: 'emerald', referees: [{ role: '裁判長', name: '王老師' }, { role: '丈量', name: '陳老師' }, { role: '叫人/檢錄', name: '三年級導師' }], volunteerCount: 2, volunteerTask: '記錄成績登錄', studentCount: 8, studentTask: '4組輪流拉皮尺與舉牌', equipment: ['立定跳遠墊 x8組'], laneNote: '於 E 區右側 4 組墊子進行', attachments: [] },
+                { id: 'bb-14-3', dateId: '12-14', venueIds: ['E'], startMin: 590, endMin: 710, checkInOffsetMin: 10, linkPrev: true, title: '一年級 立定跳遠 (全體)', color: 'rose', referees: [{ role: '裁判長', name: '林老師' }, { role: '丈量', name: '黃老師' }], volunteerCount: 3, volunteerTask: '協助一年級新生站位與安撫', studentCount: 8, studentTask: '協助量測距離', equipment: ['立定跳遠墊 x8組'], laneNote: '', attachments: [] },
+                { id: 'bb-14-4', dateId: '12-14', venueIds: ['E'], startMin: 590, endMin: 710, checkInOffsetMin: 10, linkPrev: true, title: '四年級 立定跳遠 (全體)', color: 'blue', referees: [{ role: '裁判長', name: '周老師' }, { role: '丈量', name: '吳老師' }], volunteerCount: 2, volunteerTask: '成績複核', studentCount: 8, studentTask: '輪流拉皮尺、撤收墊子', equipment: ['立定跳遠墊 x8組'], laneNote: '', attachments: [] },
+
+                // 12/16
+                { id: 'bb-16-1', dateId: '12-16', venueIds: ['B'], startMin: 470, endMin: 580, checkInOffsetMin: 20, linkPrev: false, title: '五年級 壘球擲遠 (全體)', color: 'amber', referees: [{ role: '裁判長', name: '體育組長' }, { role: '丈量', name: '徐老師' }, { role: '叫人/檢錄', name: '五年級導師' }], volunteerCount: 2, volunteerTask: '落點插旗標記', studentCount: 6, studentTask: '壘組公差：撿球與拉皮尺', equipment: ['壘球 + 標誌盤', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '7:30 壘球器材準時搬就位', attachments: [] },
+                { id: 'bb-16-2', dateId: '12-16', venueIds: ['B'], startMin: 590, endMin: 710, checkInOffsetMin: 20, linkPrev: true, title: '六年級 壘球擲遠 (全體)', color: 'blue', referees: [{ role: '裁判長', name: '體育組長' }, { role: '丈量', name: '徐老師' }], volunteerCount: 2, volunteerTask: '成績紀錄', studentCount: 6, studentTask: '壘組公差：撿球、收器材', equipment: ['壘球 + 標誌盤'], laneNote: '', attachments: [] },
+
+                // 12/17（含女子組跳高與男子組跳高 09:40 檢錄重疊浮動示範）
+                { id: 'bb-17-1', dateId: '12-17', venueIds: ['B'], startMin: 470, endMin: 590, checkInOffsetMin: 10, linkPrev: false, title: '女子組 跳高決賽', color: 'emerald', referees: [{ role: '裁判長', name: '林老師' }, { role: '丈量', name: '郭老師（升橫桿）' }, { role: '紀錄成績', name: '許老師' }], volunteerCount: 2, volunteerTask: '維護跳高墊安全', studentCount: 4, studentTask: '跳高組公差：撿橫桿、扶墊', equipment: ['跳高墊 + 橫桿 + 丈量尺', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '起跳高度 95cm，每輪升 5cm', attachments: [] },
+                { id: 'bb-17-2', dateId: '12-17', venueIds: ['B'], startMin: 600, endMin: 720, checkInOffsetMin: 20, linkPrev: true, title: '男子組 跳高決賽', color: 'blue', referees: [{ role: '裁判長', name: '林老師' }, { role: '丈量', name: '郭老師' }], volunteerCount: 2, volunteerTask: '維護跳高墊安全', studentCount: 4, studentTask: '跳高組公差：輪流支援與撤墊', equipment: ['跳高墊 + 橫桿 + 丈量尺'], laneNote: '09:40 男子組開始於場邊檢錄熱身（與女子組尾端重疊）', attachments: [] },
+                { id: 'bb-17-3', dateId: '12-17', venueIds: ['C'], startMin: 480, endMin: 580, checkInOffsetMin: 20, linkPrev: false, title: '二年級 網球趣味賽 (男+女)', color: 'amber', referees: [{ role: '裁判長', name: '二年級學年主任' }, { role: '終點判定', name: '科任老師 x2' }], volunteerCount: 3, volunteerTask: '場邊加油引導與計分', studentCount: 6, studentTask: '網球組公差：撿球與擺設標誌筒', equipment: ['網球趣味器材 x2組'], laneNote: '男女合班分組對抗，採計時積分制', attachments: [] },
+                { id: 'bb-17-4', dateId: '12-17', venueIds: ['C'], startMin: 600, endMin: 720, checkInOffsetMin: 20, linkPrev: true, title: '四年級 壘球擲遠', color: 'purple', referees: [{ role: '裁判長', name: '四年級學年主任' }, { role: '丈量', name: '科任老師' }], volunteerCount: 2, volunteerTask: '協助量測', studentCount: 6, studentTask: '壘組公差：撿球', equipment: ['壘球 + 標誌盤'], laneNote: '', attachments: [] },
+                { id: 'bb-17-5', dateId: '12-17', venueIds: ['D'], startMin: 470, endMin: 530, checkInOffsetMin: 10, linkPrev: false, title: '男子組 跳遠決賽', color: 'blue', referees: [{ role: '裁判長', name: '蔡老師' }, { role: '丈量', name: '趙老師' }], volunteerCount: 1, volunteerTask: '踩線判定', studentCount: 4, studentTask: '遠距組公差：每跳完一次立即耙平沙坑', equipment: ['跳遠沙坑耙子 + 皮尺'], laneNote: '', attachments: [] },
+                { id: 'bb-17-6', dateId: '12-17', venueIds: ['D'], startMin: 530, endMin: 590, checkInOffsetMin: 20, linkPrev: true, title: '女子組 跳遠決賽', color: 'rose', referees: [{ role: '裁判長', name: '蔡老師' }, { role: '丈量', name: '趙老師' }], volunteerCount: 1, volunteerTask: '踩線判定', studentCount: 4, studentTask: '遠距組公差：耙平沙坑、收皮尺', equipment: ['跳遠沙坑耙子 + 皮尺'], laneNote: '08:30 女子組於沙坑旁檢錄（與男子組尾端重疊）', attachments: [] },
+
+                // 12/18
+                { id: 'bb-18-1', dateId: '12-18', venueIds: ['A', 'B', 'C', 'D', 'E'], startMin: 470, endMin: 540, checkInOffsetMin: 10, linkPrev: false, title: '全校運動會開幕與進場總預演', color: 'amber', referees: [{ role: '總指揮', name: '學務主任' }, { role: '司儀播報', name: '訓育組長' }], volunteerCount: 4, volunteerTask: '各路口交通與動線引導', studentCount: 12, studentTask: '舉牌手、旗手、音響組', equipment: ['起跑架 + 發令槍(起+終)', '大隊接力棒 + 號碼背心'], laneNote: '7:50 全校各班操場集合；起+終器材同步預備', attachments: [] },
+                { id: 'bb-18-2', dateId: '12-18', venueIds: ['A'], startMin: 540, endMin: 630, checkInOffsetMin: 20, linkPrev: false, title: '100M 徑賽預賽', color: 'blue', referees: [{ role: '發令', name: '體育組長' }, { role: '終點判定', name: '科任老師 x6' }], volunteerCount: 3, volunteerTask: '終點拉線與秩序維護', studentCount: 8, studentTask: '100/60組公差：發名次牌、帶位至成績組', equipment: ['起跑架 + 發令槍(起+終)', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '各組取前 8 名晉級 12/19 決賽', attachments: [] },
+                { id: 'bb-18-3', dateId: '12-18', venueIds: ['A'], startMin: 630, endMin: 720, checkInOffsetMin: 20, linkPrev: true, title: '60M 徑賽預賽', color: 'emerald', referees: [{ role: '發令', name: '體育組長' }, { role: '終點判定', name: '科任老師 x6' }], volunteerCount: 3, volunteerTask: '終點拉線', studentCount: 8, studentTask: '100/60組公差：發名次牌', equipment: ['起跑架 + 發令槍(起+終)', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '', attachments: [] },
+                { id: 'bb-18-4', dateId: '12-18', venueIds: ['B'], startMin: 550, endMin: 710, checkInOffsetMin: 20, linkPrev: false, title: '一年級 網球趣味賽 (男+女)', color: 'rose', referees: [{ role: '裁判長', name: '一年級學年主任' }], volunteerCount: 4, volunteerTask: '協助新生分組排隊', studentCount: 6, studentTask: '網球組公差：撿球與擺設', equipment: ['網球趣味器材 x2組'], laneNote: '', attachments: [] },
+                { id: 'bb-18-5', dateId: '12-18', venueIds: ['C'], startMin: 550, endMin: 710, checkInOffsetMin: 20, linkPrev: false, title: '三年級 網球趣味賽 (男+女)', color: 'purple', referees: [{ role: '裁判長', name: '三年級學年主任' }], volunteerCount: 3, volunteerTask: '計分與加油引導', studentCount: 6, studentTask: '網球組公差：撿球', equipment: ['網球趣味器材 x2組'], laneNote: '', attachments: [] },
+
+                // 12/19
+                { id: 'bb-19-1', dateId: '12-19', venueIds: ['A'], startMin: 540, endMin: 630, checkInOffsetMin: 20, linkPrev: false, title: '100M + 60M 徑賽決賽', color: 'amber', referees: [{ role: '發令', name: '體育組長' }, { role: '終點判定', name: '終點裁判團 x8' }], volunteerCount: 4, volunteerTask: '攝影與終點拉線', studentCount: 10, studentTask: '100/60組公差：舉道次牌、發名次牌', equipment: ['起跑架 + 發令槍(起+終)', '計時碼表 + 名次牌 + 紀錄夾'], laneNote: '第1道紅、第2道黃、第3道藍、第4道綠、第5道橘、第6道白', attachments: [] },
+                { id: 'bb-19-2', dateId: '12-19', venueIds: ['M'], startMin: 540, endMin: 580, checkInOffsetMin: 10, linkPrev: false, title: '特教班 趣味闖關競賽', color: 'rose', referees: [{ role: '裁判長', name: '特教組長' }, { role: '協助引導', name: '特教班教師群' }], volunteerCount: 4, volunteerTask: '一對一陪伴與安全防護', studentCount: 4, studentTask: '支援組公差：遞送道具與掌聲加油', equipment: ['網球趣味器材 x2組'], laneNote: '', attachments: [] },
+                { id: 'bb-19-3', dateId: '12-19', venueIds: ['M'], startMin: 590, endMin: 640, checkInOffsetMin: 10, linkPrev: true, title: '一年級 班際對抗賽', color: 'emerald', referees: [{ role: '裁判長', name: '一年級學年主任' }], volunteerCount: 3, volunteerTask: '維持起點秩序', studentCount: 6, studentTask: '支援組公差：擺放折返點', equipment: ['壘球 + 標誌盤'], laneNote: '', attachments: [] },
+                { id: 'bb-19-4', dateId: '12-19', venueIds: ['M'], startMin: 650, endMin: 700, checkInOffsetMin: 10, linkPrev: true, title: '二年級 班際對抗賽', color: 'blue', referees: [{ role: '裁判長', name: '二年級學年主任' }], volunteerCount: 3, volunteerTask: '維持秩序', studentCount: 6, studentTask: '支援組公差：收折返點', equipment: ['壘球 + 標誌盤'], laneNote: '', attachments: [] },
+                { id: 'bb-19-5', dateId: '12-19', venueIds: ['E'], startMin: 540, endMin: 610, checkInOffsetMin: 10, linkPrev: false, title: '一年級 全體大會舞/律動 (E1/E2)', color: 'purple', referees: [{ role: '帶動老師', name: '一年級導師群' }], volunteerCount: 2, volunteerTask: '家長拍照區動線引導', studentCount: 4, studentTask: '支援組：音響與標記點確認', equipment: [], laneNote: '請家長於 E 區紅線外拍照區觀賞', attachments: [] },
+                { id: 'bb-19-6', dateId: '12-19', venueIds: ['E'], startMin: 620, endMin: 690, checkInOffsetMin: 10, linkPrev: true, title: '二年級 全體大會舞/律動 (E1/E2)', color: 'emerald', referees: [{ role: '帶動老師', name: '二年級導師群' }], volunteerCount: 2, volunteerTask: '家長拍照區動線引導', studentCount: 4, studentTask: '支援組：場地復原', equipment: [], laneNote: '', attachments: [] },
+                { id: 'bb-19-7', dateId: '12-19', venueIds: ['A'], startMin: 690, endMin: 740, checkInOffsetMin: 20, linkPrev: false, title: '五、六年級 400M 接力決賽', color: 'amber', referees: [{ role: '發令', name: '體育組長' }, { role: '彎道檢查', name: '彎道裁判 x4' }], volunteerCount: 3, volunteerTask: '接力區秩序維護', studentCount: 8, studentTask: '100/60組公差：收發接力棒', equipment: ['起跑架 + 發令槍(起+終)', '大隊接力棒 + 號碼背心'], laneNote: '第一棒穿紅色背心、第四棒穿螢光黃背心（方便終點判讀）', attachments: [] },
+                { id: 'bb-19-8', dateId: '12-19', venueIds: ['M'], startMin: 710, endMin: 760, checkInOffsetMin: 10, linkPrev: false, title: '上午場頒獎典禮 (一、二年級與徑賽)', color: 'rose', referees: [{ role: '司儀', name: '訓育組長' }, { role: '獎狀遞送', name: '註冊組長' }], volunteerCount: 2, volunteerTask: '引導得獎學生上台', studentCount: 6, studentTask: '禮儀服務生 x6', equipment: ['計時碼表 + 名次牌 + 紀錄夾'], laneNote: '獎狀請於 11:30 前送達司令台', attachments: [] },
+                { id: 'bb-19-9', dateId: '12-19', venueIds: ['A'], startMin: 780, endMin: 820, checkInOffsetMin: 10, linkPrev: false, title: '三年級 大隊接力決賽 (12:50檢錄)', color: 'blue', referees: [{ role: '發令', name: '體育組長' }, { role: '彎道檢查', name: '科任老師 x4' }], volunteerCount: 4, volunteerTask: '內圈安全管制', studentCount: 10, studentTask: '大隊器公差：計圈數、收發背心', equipment: ['大隊接力棒 + 號碼背心', '起跑架 + 發令槍(起+終)'], laneNote: '12:50 準時於檢錄區集合點名；最後一棒穿白色背心', attachments: [] },
+                { id: 'bb-19-10', dateId: '12-19', venueIds: ['A'], startMin: 820, endMin: 850, checkInOffsetMin: 10, linkPrev: true, title: '四年級 大隊接力決賽', color: 'emerald', referees: [{ role: '發令', name: '體育組長' }], volunteerCount: 4, volunteerTask: '內圈安全管制', studentCount: 10, studentTask: '大隊器公差：計圈數、交接背心', equipment: ['大隊接力棒 + 號碼背心'], laneNote: '', attachments: [] },
+                { id: 'bb-19-11', dateId: '12-19', venueIds: ['A'], startMin: 850, endMin: 880, checkInOffsetMin: 10, linkPrev: true, title: '五年級 大隊接力決賽', color: 'rose', referees: [{ role: '發令', name: '體育組長' }], volunteerCount: 4, volunteerTask: '內圈安全管制', studentCount: 10, studentTask: '大隊器公差：計圈數', equipment: ['大隊接力棒 + 號碼背心'], laneNote: '', attachments: [] },
+                { id: 'bb-19-12', dateId: '12-19', venueIds: ['A'], startMin: 880, endMin: 910, checkInOffsetMin: 10, linkPrev: true, title: '六年級 大隊接力決賽 (14:50叫人)', color: 'amber', referees: [{ role: '發令', name: '體育組長' }, { role: '彎道檢查', name: '科任老師 x4' }], volunteerCount: 4, volunteerTask: '全場高潮攝影與安全維護', studentCount: 10, studentTask: '大隊器公差：計圈數、回收全部背心', equipment: ['大隊接力棒 + 號碼背心'], laneNote: '14:50 廣播叫人檢錄', attachments: [] },
+                { id: 'bb-19-13', dateId: '12-19', venueIds: ['A'], startMin: 910, endMin: 950, checkInOffsetMin: 10, linkPrev: false, title: '親師趣味大隊接力賽', color: 'purple', referees: [{ role: '發令', name: '學務主任' }], volunteerCount: 3, volunteerTask: '家長隊伍檢錄', studentCount: 6, studentTask: '支援組公差：回收器材', equipment: ['大隊接力棒 + 號碼背心'], laneNote: '15:00 家長會與教職員隊伍就位', attachments: [] },
+                { id: 'bb-19-14', dateId: '12-19', venueIds: ['M'], startMin: 960, endMin: 990, checkInOffsetMin: 0, linkPrev: false, title: '運動會閉幕典禮與總錦標頒獎', color: 'emerald', referees: [{ role: '司儀', name: '訓育組長' }], volunteerCount: 2, volunteerTask: '協助導引班級整隊', studentCount: 8, studentTask: '全體公差班協助最後環境復原', equipment: [], laneNote: '', attachments: [] },
+                { id: 'bb-19-15', dateId: '12-19', venueIds: ['S'], startMin: 580, endMin: 630, checkInOffsetMin: 0, linkPrev: false, title: '第一梯次頒獎：會前賽田賽前三名 (約24人)', color: 'amber', referees: [{ role: '頒獎人', name: '校長、家長會長' }, { role: '遞獎', name: '獎狀組 x2' }], volunteerCount: 2, volunteerTask: '台下整隊上台動線', studentCount: 4, studentTask: '禮儀服務生 x4', equipment: [], laneNote: '含跳高、跳遠、壘球前六名上台合影', attachments: [] },
+                { id: 'bb-19-16', dateId: '12-19', venueIds: ['S'], startMin: 710, endMin: 760, checkInOffsetMin: 0, linkPrev: false, title: '第二梯次頒獎：100/60M 徑賽決賽 (約36人)', color: 'rose', referees: [{ role: '頒獎人', name: '教務主任、學務主任' }], volunteerCount: 2, volunteerTask: '台下依年級排隊', studentCount: 4, studentTask: '禮儀服務生 x4', equipment: [], laneNote: '分兩批上台領獎牌', attachments: [] }
+            ];
+        }
+
+        // ==================== 2. 應用程式狀態 (State) ====================
+        let state = {
+            role: 'admin',
+            appMode: 'demo',
+            timeMode: 'sim',
+            simTimeMin: 610, // 預設 10:10
+            autoPlayIntervalId: null,
+            currentDateId: '12-19',
+            selectedEventId: null,
+            personFilter: '',
+            gradeFilter: '',
+            rundownScope: 'current',
+            venues: JSON.parse(JSON.stringify(DEFAULT_VENUES)),
+            dates: JSON.parse(JSON.stringify(DEFAULT_DATES)),
+            events: []
+        };
+
+        let cloudConfig = {
+            dbUrl: '',
+            projectId: 'school-sports-115',
+            isConnected: false,
+            pollTimer: null,
+            lastCloudHash: ''
+        };
+
+        let editingCommandSlotId = null;
+
+        // ==================== 3. 初始化與儲存/雲端同步引擎 ====================
+        function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramRole = urlParams.get('role');
+            const paramMode = urlParams.get('mode');
+
+            const embeddedEl = document.getElementById('embedded-state-script');
+            let embeddedData = null;
+            if (embeddedEl && embeddedEl.textContent && embeddedEl.textContent.trim() !== 'null') {
+                try { embeddedData = JSON.parse(embeddedEl.textContent); } catch (e) {}
+            }
+
+            if (embeddedData) {
+                state.venues = embeddedData.venues || JSON.parse(JSON.stringify(DEFAULT_VENUES));
+                state.dates = embeddedData.dates || DEFAULT_DATES;
+                state.events = (embeddedData.events || []).map(normalizeEventData);
+                state.currentDateId = embeddedData.currentDateId || state.dates[0]?.id || '12-19';
+                state.appMode = paramMode || embeddedData.appMode || 'published';
+                state.role = paramRole || embeddedData.defaultRole || 'teacher';
+                if (embeddedData.cloudConfig && embeddedData.cloudConfig.dbUrl) {
+                    cloudConfig.dbUrl = embeddedData.cloudConfig.dbUrl;
+                    cloudConfig.projectId = embeddedData.cloudConfig.projectId || 'school-sports-115';
+                }
+            } else {
+                const savedRaw = localStorage.getItem(STORAGE_KEY);
+                if (savedRaw) {
+                    try {
+                        const parsed = JSON.parse(savedRaw);
+                        state.venues = parsed.venues || JSON.parse(JSON.stringify(DEFAULT_VENUES));
+                        state.dates = parsed.dates || DEFAULT_DATES;
+                        state.events = (parsed.events || []).map(normalizeEventData);
+                        state.currentDateId = parsed.currentDateId || state.dates[0]?.id || '12-19';
+                        state.simTimeMin = parsed.simTimeMin || 610;
+                    } catch (e) {
+                        state.events = buildBlackboardSampleEvents();
+                    }
+                } else {
+                    state.events = buildBlackboardSampleEvents();
+                    saveToStorage(true);
+                }
+                if (paramRole && ['admin', 'staff', 'teacher'].includes(paramRole)) state.role = paramRole;
+                if (paramMode && ['demo', 'published'].includes(paramMode)) state.appMode = paramMode;
+
+                const savedCloudRaw = localStorage.getItem(CLOUD_CFG_KEY);
+                if (savedCloudRaw) {
+                    try {
+                        const cParsed = JSON.parse(savedCloudRaw);
+                        cloudConfig.dbUrl = cParsed.dbUrl || '';
+                        cloudConfig.projectId = cParsed.projectId || 'school-sports-115';
+                    } catch (e) {}
+                }
+            }
+
+            state.dates = state.dates.map(d => ({
+                ...d,
+                commandDeckEnabled: typeof d.commandDeckEnabled === 'boolean' ? d.commandDeckEnabled : (d.commandSlots && d.commandSlots.length > 0),
+                generalStaff: d.generalStaff || { hosts: '', recorders: '', stageControl: '' },
+                commandSlots: d.commandSlots || []
+            }));
+
+            renderTimeAxisLabels();
+            renderVenuesHeader();
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            updateRoleUI();
+            updateAppModeUI();
+            updateLiveIndicator();
+
+            // 若有設定雲端資料庫網址，立即連線並開啟即時同步
+            if (cloudConfig.dbUrl) {
+                connectCloudDatabase(Boolean(embeddedData));
+            } else {
+                updateCloudSyncUI();
+            }
+
+            setInterval(() => {
+                if (state.timeMode === 'real' || state.appMode === 'published') {
+                    updateLiveIndicator();
+                    renderCanvasGridAndEvents();
+                }
+            }, 30000);
+
+            lucide.createIcons();
+        }
+
+        function normalizeEventData(ev) {
+            return {
+                ...ev,
+                venueIds: ev.venueIds || (ev.venueId ? [ev.venueId] : [state.venues[0]?.id || 'A']),
+                checkInOffsetMin: typeof ev.checkInOffsetMin === 'number' ? ev.checkInOffsetMin : 10,
+                linkPrev: Boolean(ev.linkPrev),
+                referees: Array.isArray(ev.referees) ? ev.referees : [],
+                equipment: Array.isArray(ev.equipment) ? ev.equipment : [],
+                attachments: Array.isArray(ev.attachments) ? ev.attachments : [],
+                laneNote: ev.laneNote || '',
+                actualStartMin: ev.actualStartMin || null,
+                actualEndMin: ev.actualEndMin || null
+            };
+        }
+
+        function saveToStorage(skipCloudPush = false) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    venues: state.venues,
+                    dates: state.dates,
+                    events: state.events,
+                    currentDateId: state.currentDateId,
+                    simTimeMin: state.simTimeMin
+                }));
+            } catch (e) {
+                showToast('提醒：本機空間較滿，建議刪除過大的道次表圖片或改用 PDF');
+            }
+
+            // 若已連線 Firebase 雲端資料庫且目前為管理者編輯，同步推送至雲端
+            if (!skipCloudPush && cloudConfig.dbUrl && cloudConfig.isConnected && state.role === 'admin') {
+                pushLocalToCloudNow(true);
+            }
+        }
+
+        // ==================== 雲端即時資料庫同步 (Firebase REST API) ====================
+        function getCloudEndpointUrl() {
+            const cleanBase = cloudConfig.dbUrl.trim().replace(/\/+$/, '');
+            const cleanProj = (cloudConfig.projectId || 'school-sports-115').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+            return `${cleanBase}/artifacts/${cleanProj}.json`;
+        }
+
+        function openCloudSyncModal() {
+            document.getElementById('cloudDbUrlInput').value = cloudConfig.dbUrl || '';
+            document.getElementById('cloudProjectIdInput').value = cloudConfig.projectId || 'school-sports-115';
+            document.getElementById('cloudSyncTestResult').classList.add('hidden');
+            document.getElementById('cloudSyncModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeCloudSyncModal() {
+            document.getElementById('cloudSyncModal').classList.add('hidden');
+        }
+
+        async function saveCloudSyncSettings() {
+            const url = document.getElementById('cloudDbUrlInput').value.trim();
+            const projId = document.getElementById('cloudProjectIdInput').value.trim() || 'school-sports-115';
+
+            cloudConfig.dbUrl = url;
+            cloudConfig.projectId = projId;
+            localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify({ dbUrl: url, projectId: projId }));
+
+            if (!url) {
+                if (cloudConfig.pollTimer) clearInterval(cloudConfig.pollTimer);
+                cloudConfig.isConnected = false;
+                updateCloudSyncUI();
+                closeCloudSyncModal();
+                showToast('已切回單機瀏覽器儲存模式');
+                return;
+            }
+
+            const resultBox = document.getElementById('cloudSyncTestResult');
+            resultBox.classList.remove('hidden');
+            resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200';
+            resultBox.textContent = '正在連線測試雲端資料庫...';
+
+            const ok = await connectCloudDatabase(false);
+            if (ok) {
+                resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
+                resultBox.textContent = '✅ 連線成功！之後修改任何賽程將即時同步至所有裝置。';
+                setTimeout(() => closeCloudSyncModal(), 900);
+            } else {
+                resultBox.className = 'mb-3 p-2.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200';
+                resultBox.textContent = '❌ 無法連線，請確認網址格式（https://xxx.firebaseio.com）及已開啟測試模式權限。';
+            }
+        }
+
+        async function connectCloudDatabase(preferCloudOverLocal = false) {
+            if (!cloudConfig.dbUrl) return false;
+            try {
+                const endpoint = getCloudEndpointUrl();
+                const res = await fetch(endpoint);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const cloudData = await res.json();
+
+                cloudConfig.isConnected = true;
+                updateCloudSyncUI();
+
+                if (cloudData && cloudData.events) {
+                    if (preferCloudOverLocal || state.role !== 'admin') {
+                        applyCloudPayload(cloudData);
+                    }
+                } else if (state.role === 'admin') {
+                    // 雲端尚無資料，自動將目前本機賽程推送上去
+                    await pushLocalToCloudNow(true);
+                }
+
+                // 啟動每 4 秒輪詢監聽雲端最新變更（讓全校導師/工作人員手機即時自動更新）
+                if (cloudConfig.pollTimer) clearInterval(cloudConfig.pollTimer);
+                cloudConfig.pollTimer = setInterval(pollCloudUpdates, 4000);
+                return true;
+            } catch (e) {
+                cloudConfig.isConnected = false;
+                updateCloudSyncUI();
+                return false;
+            }
+        }
+
+        async function pushLocalToCloudNow(silent = false) {
+            if (!cloudConfig.dbUrl) {
+                showToast('請先輸入 Firebase 資料庫網址');
+                return;
+            }
+            try {
+                const payload = {
+                    updatedAt: Date.now(),
+                    venues: state.venues,
+                    dates: state.dates,
+                    events: state.events
+                };
+                const rawJson = JSON.stringify(payload);
+                cloudConfig.lastCloudHash = String(payload.updatedAt);
+
+                const res = await fetch(getCloudEndpointUrl(), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: rawJson
+                });
+                if (!res.ok) throw new Error('Push failed');
+                cloudConfig.isConnected = true;
+                updateCloudSyncUI();
+                if (!silent) showToast('☁️ 已將最新賽程同步上傳至雲端！');
+            } catch (e) {
+                cloudConfig.isConnected = false;
+                updateCloudSyncUI();
+                if (!silent) showToast('雲端上傳失敗，請檢查網路或資料庫權限');
+            }
+        }
+
+        async function pollCloudUpdates() {
+            if (!cloudConfig.dbUrl || !cloudConfig.isConnected) return;
+            try {
+                const res = await fetch(getCloudEndpointUrl());
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data || !data.updatedAt) return;
+
+                const incomingHash = String(data.updatedAt);
+                if (incomingHash !== cloudConfig.lastCloudHash) {
+                    cloudConfig.lastCloudHash = incomingHash;
+                    applyCloudPayload(data);
+                }
+            } catch (e) {}
+        }
+
+        function applyCloudPayload(data) {
+            if (!data) return;
+            if (Array.isArray(data.venues) && data.venues.length > 0) state.venues = data.venues;
+            if (Array.isArray(data.dates) && data.dates.length > 0) state.dates = data.dates;
+            if (Array.isArray(data.events)) state.events = data.events.map(normalizeEventData);
+
+            saveToStorage(true);
+            renderVenuesHeader();
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function updateCloudSyncUI() {
+            const badge = document.getElementById('cloudStatusBadge');
+            const btn = document.getElementById('btn-cloud-sync');
+            if (!badge || !btn) return;
+
+            if (cloudConfig.dbUrl && cloudConfig.isConnected) {
+                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors';
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 雲端即時同步中`;
+                btn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors';
+            } else if (cloudConfig.dbUrl && !cloudConfig.isConnected) {
+                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 cursor-pointer';
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> 雲端未連線`;
+            } else {
+                badge.className = 'hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors';
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> 單機儲存`;
+                btn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition-colors';
+            }
+        }
+
+        // ==================== 4. 雙向連鎖磁吸引擎 ====================
+        function applyMagneticChain(anchorEventId, oldEndMin, newEndMin) {
+            const delta = newEndMin - oldEndMin;
+            if (delta === 0) return;
+
+            const anchorEv = state.events.find(e => e.id === anchorEventId);
+            if (!anchorEv) return;
+
+            const anchorPrimaryVenue = (anchorEv.venueIds || ['A'])[0];
+            const sameVenueEvents = state.events
+                .filter(e => e.dateId === anchorEv.dateId && e.id !== anchorEv.id && (e.venueIds || ['A'])[0] === anchorPrimaryVenue)
+                .sort((a, b) => a.startMin - b.startMin);
+
+            let prevOldEnd = oldEndMin;
+            let prevNewEnd = newEndMin;
+
+            for (const nextEv of sameVenueEvents) {
+                if (nextEv.linkPrev && nextEv.startMin >= prevOldEnd - 10) {
+                    const gap = nextEv.startMin - prevOldEnd;
+                    const duration = nextEv.endMin - nextEv.startMin;
+                    const nextOldEnd = nextEv.endMin;
+
+                    const targetNewStart = Math.max(START_HOUR * 60, prevNewEnd + gap);
+                    const targetNewEnd = Math.min(END_HOUR * 60, targetNewStart + duration);
+
+                    nextEv.startMin = targetNewStart;
+                    nextEv.endMin = targetNewEnd;
+
+                    prevOldEnd = nextOldEnd;
+                    prevNewEnd = targetNewEnd;
+                } else if (nextEv.startMin >= prevOldEnd) {
+                    break;
+                }
+            }
+        }
+
+        function checkIfCheckInOverlaps(ev, checkInStartMin) {
+            if (checkInStartMin >= ev.startMin) return false;
+            const myVenues = ev.venueIds || ['A'];
+            return state.events.some(other => {
+                if (other.id === ev.id || other.dateId !== ev.dateId) return false;
+                const otherVenues = other.venueIds || ['A'];
+                const shareVenue = myVenues.some(v => otherVenues.includes(v));
+                if (!shareVenue) return false;
+                return other.endMin > checkInStartMin && other.startMin < ev.startMin;
+            });
+        }
+
+        // ==================== 5. 場地自由管理 (新增 / 刪除 / 編輯名稱) ====================
+        function renderVenuesHeader() {
+            const headerRow = document.getElementById('venuesHeaderRow');
+            const colCount = Math.max(1, state.venues.length);
+            headerRow.style.gridTemplateColumns = `repeat(${colCount}, minmax(145px, 1fr))`;
+
+            headerRow.innerHTML = state.venues.map(v => `
+                <div class="py-2 px-2 text-center border-r border-slate-200/80 last:border-r-0 ${v.id === 'S' ? 'bg-amber-50/60' : ''}">
+                    <div class="text-xs font-extrabold ${v.id === 'S' ? 'text-amber-800' : 'text-slate-800'} truncate">${v.name}</div>
+                    <div class="text-[10px] ${v.id === 'S' ? 'text-amber-600 font-semibold' : 'text-slate-400'} truncate">${v.subtitle || ''}</div>
+                </div>
+            `).join('');
+        }
+
+        function openVenueManagerModal() {
+            renderVenueManagerList();
+            document.getElementById('venueManagerModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeVenueManagerModal() {
+            document.getElementById('venueManagerModal').classList.add('hidden');
+            renderVenuesHeader();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            saveToStorage();
+        }
+
+        function renderVenueManagerList() {
+            const container = document.getElementById('venueManagerList');
+            container.innerHTML = state.venues.map((v, idx) => `
+                <div class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span class="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs font-extrabold text-slate-600 shrink-0">${idx + 1}</span>
+                    <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" value="${v.name}" oninput="updateVenueField(${idx}, 'name', this.value)" placeholder="場地名稱（如：A 跑道區）" class="px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input type="text" value="${v.subtitle || ''}" oninput="updateVenueField(${idx}, 'subtitle', this.value)" placeholder="場地說明（如：100M/接力）" class="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button onclick="deleteVenueByIndex(${idx})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0" title="刪除此場地">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function updateVenueField(idx, field, val) {
+            if (!state.venues[idx]) return;
+            state.venues[idx][field] = val;
+        }
+
+        function addNewVenue() {
+            const newId = 'V' + Date.now().toString().slice(-4);
+            state.venues.push({
+                id: newId,
+                name: `新場地 ${state.venues.length + 1}`,
+                subtitle: '自訂比賽區域'
+            });
+            renderVenueManagerList();
+        }
+
+        function deleteVenueByIndex(idx) {
+            if (state.venues.length <= 1) {
+                showToast('至少需保留一個場地欄位');
+                return;
+            }
+            const removedId = state.venues[idx].id;
+            state.venues.splice(idx, 1);
+            const fallbackId = state.venues[0].id;
+            state.events.forEach(ev => {
+                ev.venueIds = (ev.venueIds || []).filter(id => id !== removedId);
+                if (ev.venueIds.length === 0) ev.venueIds = [fallbackId];
+            });
+            renderVenueManagerList();
+            showToast('已刪除該場地欄位');
+        }
+
+        // ==================== 6. 雙模態聚焦篩選列（導師年級積木 vs 工作人員裁判積木） ====================
+        function renderPersonFilterBar() {
+            const bar = document.getElementById('personFilterBar');
+            if (!bar) return;
+
+            // 導師視角：顯示「年級聚焦積木」
+            if (state.role === 'teacher') {
+                const activeGrade = state.gradeFilter || '';
+                bar.innerHTML = `
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200">
+                            <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i> 點擊年級積木聚焦：
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        ${GRADE_BLOCKS.map(g => {
+                            const isActive = activeGrade === g.id;
+                            return `<button onclick="toggleGradeFilterChip('${g.id}')" class="px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all shrink-0 ${isActive ? 'bg-amber-500 text-slate-950 shadow-sm ring-2 ring-amber-300' : 'bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200'}">${g.label}</button>`;
+                        }).join('')}
+                        ${activeGrade ? `<button onclick="clearGradeFilter()" class="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 text-[11px] font-bold shrink-0">顯示全部年級</button>` : ''}
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            // 管理者 / 工作人員視角：顯示「人員與裁判積木 ＋ 搜尋框」
+            const dayEvents = state.events.filter(e => e.dateId === state.currentDateId);
+            const currentDateObj = state.dates.find(d => d.id === state.currentDateId);
+            const peopleSet = new Set();
+
+            dayEvents.forEach(ev => {
+                (ev.referees || []).forEach(r => {
+                    if (r.name && r.name.trim()) {
+                        r.name.split(/[、,，/｜\s]+/).forEach(part => {
+                            const clean = part.replace(/[\(（].*?[\)）]/g, '').trim();
+                            if (clean && clean.length >= 2 && clean.length <= 6 && !clean.startsWith('x')) {
+                                peopleSet.add(clean);
+                            }
+                        });
+                    }
+                });
+            });
+
+            if (currentDateObj && currentDateObj.commandDeckEnabled && currentDateObj.commandSlots) {
+                currentDateObj.commandSlots.forEach(slot => {
+                    if (slot.staff) {
+                        slot.staff.split(/[、,，/｜\s]+/).forEach(part => {
+                            const clean = part.replace(/[\(（].*?[\)）]/g, '').trim();
+                            if (clean && clean.length >= 2 && clean.length <= 6) {
+                                peopleSet.add(clean);
+                            }
+                        });
+                    }
+                });
+            }
+
+            const peopleList = Array.from(peopleSet).slice(0, 18);
+            const activeFilter = (state.personFilter || '').trim();
+
+            bar.innerHTML = `
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="personSearchInput" value="${activeFilter}" oninput="setPersonFilter(this.value)" placeholder="搜尋裁判/人員姓名..." class="pl-7 pr-6 py-1 text-xs bg-slate-100 border border-slate-200 rounded-lg w-40 sm:w-48 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 font-semibold text-slate-800">
+                        ${activeFilter ? `<button onclick="clearPersonFilter()" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>` : ''}
+                    </div>
+                </div>
+                <div class="flex items-center gap-1 overflow-x-auto py-0.5">
+                    <span class="text-[10px] font-bold text-slate-400 shrink-0 mr-1">人員積木：</span>
+                    ${peopleList.length === 0 ? `<span class="text-[11px] text-slate-400">尚未登錄裁判姓名</span>` : peopleList.map(name => {
+                        const isActive = activeFilter === name;
+                        return `<button onclick="togglePersonFilterChip('${name}')" class="px-2 py-0.5 rounded-md text-[11px] font-bold transition-all shrink-0 ${isActive ? 'bg-amber-500 text-slate-950 shadow-sm ring-2 ring-amber-300' : 'bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 border border-slate-200/80'}">${name}</button>`;
+                    }).join('')}
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        function toggleGradeFilterChip(gradeId) {
+            state.gradeFilter = (state.gradeFilter === gradeId) ? '' : gradeId;
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+        }
+
+        function clearGradeFilter() {
+            state.gradeFilter = '';
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+        }
+
+        function setPersonFilter(val) {
+            state.personFilter = val;
+            renderCommandDeck();
+            renderCanvasGridAndEvents();
+        }
+
+        function togglePersonFilterChip(name) {
+            state.personFilter = (state.personFilter === name) ? '' : name;
+            renderPersonFilterBar();
+            renderCommandDeck();
+            renderCanvasGridAndEvents();
+        }
+
+        function clearPersonFilter() {
+            state.personFilter = '';
+            renderPersonFilterBar();
+            renderCommandDeck();
+            renderCanvasGridAndEvents();
+        }
+
+        function doesEventMatchActiveFilter(ev) {
+            if (state.role === 'teacher') {
+                const gId = state.gradeFilter;
+                if (!gId) return true;
+                const gObj = GRADE_BLOCKS.find(g => g.id === gId);
+                if (!gObj) return true;
+                const titleAndNote = `${ev.title || ''} ${ev.laneNote || ''}`;
+                if (gObj.keywords.some(kw => titleAndNote.includes(kw))) return true;
+                if (gId !== '全校' && (titleAndNote.includes('預演') || titleAndNote.includes('閉幕'))) return true;
+                return false;
+            }
+
+            const q = (state.personFilter || '').trim().toLowerCase();
+            if (!q) return true;
+            const refMatch = (ev.referees || []).some(r => (r.name || '').toLowerCase().includes(q) || (r.role || '').toLowerCase().includes(q));
+            const titleMatch = (ev.title || '').toLowerCase().includes(q);
+            return refMatch || titleMatch;
+        }
+
+        // ==================== 7. 司令台中控置頂層邏輯 ====================
+        function enableCommandDeckForCurrentDate() {
+            const d = state.dates.find(x => x.id === state.currentDateId);
+            if (!d) return;
+            d.commandDeckEnabled = true;
+            saveToStorage();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            showToast('已開啟本日司令台中控置頂層');
+        }
+
+        function disableCommandDeckForCurrentDate() {
+            const d = state.dates.find(x => x.id === state.currentDateId);
+            if (!d) return;
+            d.commandDeckEnabled = false;
+            saveToStorage();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            showToast('已收起本日司令台中控層');
+        }
+
+        function renderCommandDeck() {
+            const container = document.getElementById('commandDeckContainer');
+            const list = document.getElementById('commandSlotsList');
+            const enableBtn = document.getElementById('btn-enable-command-deck');
+            const addBtn = document.getElementById('btn-add-command-slot');
+            const disableBtn = document.getElementById('btn-disable-command-deck');
+
+            const currentDateObj = state.dates.find(d => d.id === state.currentDateId);
+            if (!currentDateObj) return;
+
+            const isEnabled = Boolean(currentDateObj.commandDeckEnabled);
+
+            if (!isEnabled) {
+                container.classList.add('hidden');
+                if (state.role === 'admin') {
+                    enableBtn.classList.remove('hidden');
+                    enableBtn.classList.add('inline-flex');
+                } else {
+                    enableBtn.classList.add('hidden');
+                    enableBtn.classList.remove('inline-flex');
+                }
+                return;
+            }
+
+            enableBtn.classList.add('hidden');
+            enableBtn.classList.remove('inline-flex');
+            container.classList.remove('hidden');
+
+            if (state.role === 'admin') {
+                addBtn.classList.remove('hidden');
+                disableBtn.classList.remove('hidden');
+            } else {
+                addBtn.classList.add('hidden');
+                disableBtn.classList.add('hidden');
+            }
+
+            const slots = [...(currentDateObj.commandSlots || [])].sort((a, b) => a.startMin - b.startMin);
+            const activeFilter = state.role !== 'teacher' ? (state.personFilter || '').trim().toLowerCase() : '';
+
+            if (slots.length === 0) {
+                list.innerHTML = `<div class="text-[11px] text-slate-400 py-1">尚未排定司令台時段任務${state.role === 'admin' ? '，可點擊右上角「+ 新增播報/頒獎」建立' : ''}</div>`;
+                return;
+            }
+
+            list.innerHTML = slots.map(slot => {
+                const isAward = slot.type === 'award';
+                const isRecord = slot.type === 'record';
+                const badgeStyle = isAward
+                    ? 'bg-amber-400 text-slate-950'
+                    : isRecord
+                        ? 'bg-emerald-400 text-slate-950'
+                        : 'bg-sky-400 text-slate-950';
+                const typeText = isAward ? '🏆 穿插頒獎' : isRecord ? '📋 成績公告' : '🎙️ 司儀播報';
+
+                const isMatch = !activeFilter || (slot.staff || '').toLowerCase().includes(activeFilter) || (slot.content || '').toLowerCase().includes(activeFilter);
+                const filterClass = activeFilter ? (isMatch ? 'ring-2 ring-amber-400 bg-white/20' : 'opacity-30') : 'bg-white/10 hover:bg-white/15';
+
+                return `
+                    <div onclick="${state.role === 'admin' ? `openCommandSlotModal('${slot.id}')` : ''}" class="shrink-0 max-w-xs border border-white/15 rounded-xl px-3 py-1.5 transition-all ${filterClass} ${state.role === 'admin' ? 'cursor-pointer' : ''}">
+                        <div class="flex items-center justify-between gap-2 mb-0.5">
+                            <span class="px-1.5 py-0.2 rounded text-[10px] font-extrabold ${badgeStyle}">${typeText}</span>
+                            <span class="text-[10px] font-mono font-bold text-amber-300">${minToTimeStr(slot.startMin)} - ${minToTimeStr(slot.endMin)}</span>
+                        </div>
+                        <div class="text-[11px] font-bold text-white truncate">${slot.staff || '未指定人員'}</div>
+                        <div class="text-[10px] text-slate-300 truncate">${slot.content || ''}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openCommandSlotModal(slotId = null) {
+            editingCommandSlotId = slotId;
+            const d = state.dates.find(x => x.id === state.currentDateId);
+            if (!d) return;
+
+            const delBtn = document.getElementById('btnDeleteCmdSlot');
+            if (slotId) {
+                const slot = (d.commandSlots || []).find(s => s.id === slotId);
+                if (!slot) return;
+                document.getElementById('commandModalTitle').textContent = '編輯司令台中控任務';
+                document.getElementById('cmdTypeInput').value = slot.type || 'award';
+                document.getElementById('cmdStartInput').value = minToTimeStr(slot.startMin);
+                document.getElementById('cmdEndInput').value = minToTimeStr(slot.endMin);
+                document.getElementById('cmdStaffInput').value = slot.staff || '';
+                document.getElementById('cmdContentInput').value = slot.content || '';
+                delBtn.classList.remove('hidden');
+            } else {
+                document.getElementById('commandModalTitle').textContent = '新增司令台中控任務';
+                document.getElementById('cmdTypeInput').value = 'award';
+                document.getElementById('cmdStartInput').value = '09:30';
+                document.getElementById('cmdEndInput').value = '10:30';
+                document.getElementById('cmdStaffInput').value = '';
+                document.getElementById('cmdContentInput').value = '';
+                delBtn.classList.add('hidden');
+            }
+            document.getElementById('commandSlotModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeCommandSlotModal() {
+            document.getElementById('commandSlotModal').classList.add('hidden');
+            editingCommandSlotId = null;
+        }
+
+        function saveCommandSlot() {
+            const d = state.dates.find(x => x.id === state.currentDateId);
+            if (!d) return;
+            const type = document.getElementById('cmdTypeInput').value;
+            const startMin = parseTimeStrToMin(document.getElementById('cmdStartInput').value);
+            const endMin = parseTimeStrToMin(document.getElementById('cmdEndInput').value);
+            const staff = document.getElementById('cmdStaffInput').value.trim();
+            const content = document.getElementById('cmdContentInput').value.trim();
+
+            if (startMin === null || endMin === null || endMin <= startMin) {
+                showToast('請輸入正確的起訖時間（例如 09:30 與 10:30）');
+                return;
+            }
+
+            if (!d.commandSlots) d.commandSlots = [];
+            if (editingCommandSlotId) {
+                const slot = d.commandSlots.find(s => s.id === editingCommandSlotId);
+                if (slot) {
+                    slot.type = type;
+                    slot.startMin = startMin;
+                    slot.endMin = endMin;
+                    slot.staff = staff;
+                    slot.content = content;
+                }
+            } else {
+                d.commandSlots.push({
+                    id: 'cmd-' + Date.now(),
+                    type, startMin, endMin, staff, content
+                });
+            }
+
+            saveToStorage();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            closeCommandSlotModal();
+            showToast('已更新司令台中控任務');
+        }
+
+        function deleteCurrentCommandSlot() {
+            const d = state.dates.find(x => x.id === state.currentDateId);
+            if (!d || !editingCommandSlotId) return;
+            d.commandSlots = (d.commandSlots || []).filter(s => s.id !== editingCommandSlotId);
+            saveToStorage();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            closeCommandSlotModal();
+            showToast('已刪除該司令台時段');
+        }
+
+        // ==================== 8. 模式與時間線控制 ====================
+        function toggleAppMode() {
+            if (state.appMode === 'demo') {
+                state.appMode = 'published';
+                stopAutoPlaySim();
+                state.timeMode = 'real';
+                showToast('已切換為「正式發布版」：時間線同步真實時鐘');
+            } else {
+                state.appMode = 'demo';
+                state.timeMode = 'sim';
+                showToast('已切換為「演示測試版」：可使用時間快轉模擬器');
+            }
+            updateAppModeUI();
+            updateLiveIndicator();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function updateAppModeUI() {
+            const simBar = document.getElementById('liveTimeSimulatorBar');
+            const modeBtn = document.getElementById('btn-toggle-mode');
+            const modeLabel = document.getElementById('appModeLabel');
+
+            if (state.appMode === 'published') {
+                simBar.classList.add('hidden');
+                modeLabel.textContent = '正式發布版';
+                modeBtn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors';
+            } else {
+                simBar.classList.remove('hidden');
+                modeLabel.textContent = '演示測試版';
+                modeBtn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-colors';
+            }
+        }
+
+        function getCurrentLiveMinutes() {
+            if (state.timeMode === 'sim' && state.appMode === 'demo') {
+                return state.simTimeMin;
+            }
+            const now = new Date();
+            return now.getHours() * 60 + now.getMinutes();
+        }
+
+        function changeTimeMode(mode) {
+            state.timeMode = mode;
+            const simControls = document.getElementById('simTimeControls');
+            if (mode === 'real') {
+                stopAutoPlaySim();
+                simControls.classList.add('hidden');
+            } else {
+                simControls.classList.remove('hidden');
+            }
+            updateLiveIndicator();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function adjustSimTime(deltaMin) {
+            state.simTimeMin = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60, state.simTimeMin + deltaMin));
+            saveToStorage(true);
+            updateLiveIndicator();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function toggleAutoPlaySim() {
+            const btn = document.getElementById('btnAutoPlaySim');
+            if (state.autoPlayIntervalId) {
+                stopAutoPlaySim();
+                showToast('已暫停自動快轉模擬');
+            } else {
+                state.autoPlayIntervalId = setInterval(() => {
+                    if (state.simTimeMin >= END_HOUR * 60 - 10) {
+                        stopAutoPlaySim();
+                        showToast('模擬時間已抵達 17:00 結束');
+                        return;
+                    }
+                    adjustSimTime(10);
+                }, 5000);
+                btn.className = 'ml-1 flex items-center gap-1 px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors animate-pulse';
+                btn.innerHTML = `<i data-lucide="pause" class="w-3 h-3"></i><span>快轉中...</span>`;
+                lucide.createIcons();
+                showToast('▶ 啟動快轉測試：每 5 秒時間線自動前進 10 分鐘');
+            }
+        }
+
+        function stopAutoPlaySim() {
+            if (state.autoPlayIntervalId) {
+                clearInterval(state.autoPlayIntervalId);
+                state.autoPlayIntervalId = null;
+            }
+            const btn = document.getElementById('btnAutoPlaySim');
+            if (btn) {
+                btn.className = 'ml-1 flex items-center gap-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition-colors';
+                btn.innerHTML = `<i data-lucide="play" class="w-3 h-3"></i><span>快轉(5s=10m)</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        function updateLiveIndicator() {
+            const curMin = getCurrentLiveMinutes();
+            const label = document.getElementById('currentLiveTimeLabel');
+            const line = document.getElementById('liveNowIndicatorLine');
+            const badge = document.getElementById('liveLineBadge');
+
+            if (label) label.textContent = minToTimeStr(curMin);
+
+            if (curMin >= START_HOUR * 60 && curMin <= END_HOUR * 60) {
+                const offsetSlots = (curMin - START_HOUR * 60) / STEP_MINUTES;
+                const topPx = offsetSlots * SLOT_HEIGHT;
+                line.style.top = `${topPx}px`;
+                line.classList.remove('hidden');
+                badge.textContent = `${minToTimeStr(curMin)} LIVE`;
+            } else {
+                line.classList.add('hidden');
+            }
+        }
+
+        // ==================== 9. 角色權限切換 (RBAC) ====================
+        function switchRole(newRole) {
+            state.role = newRole;
+            state.personFilter = '';
+            state.gradeFilter = '';
+            updateRoleUI();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+
+            if (cloudConfig.dbUrl && newRole !== 'admin') {
+                pollCloudUpdates();
+            }
+        }
+
+        function updateRoleUI() {
+            document.querySelectorAll('.role-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-blue-600', 'shadow-sm');
+                btn.classList.add('text-slate-600');
+            });
+            const activeBtn = document.getElementById(`role-btn-${state.role}`);
+            if (activeBtn) {
+                activeBtn.classList.add('bg-white', 'text-blue-600', 'shadow-sm');
+                activeBtn.classList.remove('text-slate-600');
+            }
+
+            const toolbox = document.getElementById('adminDraggableToolbox');
+            const readOnlyBanner = document.getElementById('readOnlyBanner');
+            const addDateBtn = document.getElementById('btn-add-date');
+            const exportRundownBtn = document.getElementById('btn-export-rundown');
+            const manageVenuesBtn = document.getElementById('btn-manage-venues');
+            const hintCard = document.getElementById('roleHintCard');
+
+            if (state.role === 'admin') {
+                toolbox.classList.remove('hidden');
+                readOnlyBanner.classList.add('hidden');
+                addDateBtn.classList.remove('hidden');
+                exportRundownBtn.classList.remove('hidden');
+                manageVenuesBtn.classList.remove('hidden');
+                hintCard.className = 'rounded-xl p-2.5 bg-blue-50/90 border border-blue-100 text-[11px] leading-relaxed text-blue-800';
+                hintCard.innerHTML = `<strong>目前：總召/管理者模式</strong><br>可拖拉新增、調整場地與檢錄、上傳道次表，並支援<b>雲端即時同步</b>。`;
+            } else if (state.role === 'staff') {
+                toolbox.classList.add('hidden');
+                readOnlyBanner.classList.remove('hidden');
+                addDateBtn.classList.add('hidden');
+                exportRundownBtn.classList.remove('hidden');
+                manageVenuesBtn.classList.add('hidden');
+                hintCard.className = 'rounded-xl p-2.5 bg-amber-50/90 border border-amber-100 text-[11px] leading-relaxed text-amber-800';
+                hintCard.innerHTML = `<strong>目前：工作人員/裁判視角</strong><br>唯讀檢視。可點擊上方人員積木快速高亮自己的場次與器材明細。`;
+            } else {
+                toolbox.classList.add('hidden');
+                readOnlyBanner.classList.remove('hidden');
+                addDateBtn.classList.add('hidden');
+                exportRundownBtn.classList.add('hidden');
+                manageVenuesBtn.classList.add('hidden');
+                hintCard.className = 'rounded-xl p-2.5 bg-emerald-50/90 border border-emerald-100 text-[11px] leading-relaxed text-emerald-800';
+                hintCard.innerHTML = `<strong>目前：班級導師精簡視角</strong><br>可點擊上方<b>年級積木</b>聚焦本班賽程，點開卡片即可查看檢錄與道次表。`;
+            }
+            renderDateTree();
+        }
+
+        // ==================== 10. 左欄日期樹狀目錄（含刪除按鈕） ====================
+        function renderDateTree() {
+            const container = document.getElementById('dateTreeContainer');
+            const categories = ['會前賽', '運動會正式賽'];
+            let html = '';
+
+            categories.forEach(cat => {
+                const items = state.dates.filter(d => d.category === cat);
+                html += `
+                    <div>
+                        <div class="flex items-center gap-1.5 px-2 mb-1.5 text-[11px] font-bold text-slate-400">
+                            <i data-lucide="folder-open" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <span>${cat}</span>
+                        </div>
+                        <div class="space-y-1">
+                `;
+                items.forEach(d => {
+                    const isSelected = d.id === state.currentDateId;
+                    const count = state.events.filter(e => e.dateId === d.id).length;
+                    html += `
+                        <div class="group flex items-center gap-1">
+                            <button onclick="selectDate('${d.id}')" class="flex-1 flex items-center justify-between px-2.5 py-2 rounded-xl text-left text-xs font-semibold transition-all min-w-0 ${isSelected ? 'bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}">
+                                <span class="truncate pr-1">${d.label}</span>
+                                <span class="px-1.5 py-0.5 rounded-full text-[10px] shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200/70 text-slate-500'}">${count}</span>
+                            </button>
+                            ${state.role === 'admin' ? `
+                                <button onclick="deleteDateConfirm('${d.id}', event)" class="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all shrink-0" title="刪除此賽程日期">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+            });
+
+            container.innerHTML = html;
+            const currentObj = state.dates.find(d => d.id === state.currentDateId);
+            if (currentObj) {
+                document.getElementById('currentDateBadge').textContent = currentObj.category;
+                document.getElementById('currentDateTitle').textContent = currentObj.label;
+            }
+            lucide.createIcons();
+        }
+
+        function selectDate(dateId) {
+            state.currentDateId = dateId;
+            state.selectedEventId = null;
+            saveToStorage(true);
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function deleteDateConfirm(dateId, e) {
+            if (e) e.stopPropagation();
+            if (state.dates.length <= 1) {
+                showToast('系統至少需保留一個賽程日期');
+                return;
+            }
+            const target = state.dates.find(d => d.id === dateId);
+            if (!target) return;
+
+            state.dates = state.dates.filter(d => d.id !== dateId);
+            state.events = state.events.filter(ev => ev.dateId !== dateId);
+            if (state.currentDateId === dateId) {
+                state.currentDateId = state.dates[0].id;
+                state.selectedEventId = null;
+            }
+            saveToStorage();
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`已刪除賽程日期「${target.label}」`);
+        }
+
+        function openAddDateModal() {
+            document.getElementById('newDateLabel').value = '';
+            document.getElementById('addDateModal').classList.remove('hidden');
+        }
+        function closeAddDateModal() {
+            document.getElementById('addDateModal').classList.add('hidden');
+        }
+        function confirmAddDate() {
+            const category = document.getElementById('newDateCategory').value;
+            const label = document.getElementById('newDateLabel').value.trim();
+            if (!label) { showToast('請輸入日期名稱'); return; }
+            const newId = 'date-' + Date.now();
+            state.dates.push({
+                id: newId,
+                category,
+                label,
+                commandDeckEnabled: false,
+                generalStaff: { hosts: '', recorders: '', stageControl: '' },
+                commandSlots: []
+            });
+            state.currentDateId = newId;
+            state.selectedEventId = null;
+            saveToStorage();
+            closeAddDateModal();
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`已新增日期：${label}`);
+        }
+
+        // ==================== 11. 中欄時間軸畫布渲染（每 10 分鐘一格 + 浮動重疊檢錄層） ====================
+        function renderTimeAxisLabels() {
+            const container = document.getElementById('timeAxisLabels');
+            let html = '';
+            for (let m = START_HOUR * 60; m < END_HOUR * 60; m += STEP_MINUTES) {
+                const isHalfHour = m % 30 === 0;
+                const timeStr = minToTimeStr(m);
+                html += `
+                    <div style="height: ${SLOT_HEIGHT}px;" class="relative border-b ${isHalfHour ? 'border-slate-200/80' : 'border-transparent'}">
+                        ${isHalfHour ? `<span class="absolute -top-2 right-2 text-[11px] font-semibold ${m % 60 === 0 ? 'text-slate-700 font-bold' : 'text-slate-400'}">${timeStr}</span>` : ''}
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function renderCanvasGridAndEvents() {
+            const gridContainer = document.getElementById('venuesGridColumns');
+            const overlayLayer = document.getElementById('eventsOverlayLayer');
+            const emptyHint = document.getElementById('emptyCanvasHint');
+            const curLiveMin = getCurrentLiveMinutes();
+            const colCount = Math.max(1, state.venues.length);
+
+            const dayEvents = state.events.filter(e => e.dateId === state.currentDateId);
+            const hasActiveFilter = state.role === 'teacher'
+                ? Boolean(state.gradeFilter)
+                : Boolean((state.personFilter || '').trim());
+
+            document.getElementById('eventCountBadge').textContent = `${dayEvents.length} 個項目`;
+
+            // 1. 建立動態欄數背景時間格線
+            gridContainer.innerHTML = '';
+            gridContainer.style.gridTemplateColumns = `repeat(${colCount}, minmax(145px, 1fr))`;
+
+            state.venues.forEach((v) => {
+                const col = document.createElement('div');
+                col.className = `relative border-r border-slate-200/80 last:border-r-0 ${v.id === 'S' ? 'bg-amber-50/20' : ''}`;
+                col.dataset.venueId = v.id;
+
+                for (let m = START_HOUR * 60; m < END_HOUR * 60; m += STEP_MINUTES) {
+                    const isHour = m % 60 === 0;
+                    const isHalfHour = m % 30 === 0 && !isHour;
+                    const slot = document.createElement('div');
+                    slot.className = `slot-dropzone ${isHour ? 'border-b border-slate-300/70' : isHalfHour ? 'border-b border-slate-200' : 'border-b border-dashed border-slate-100'} transition-colors`;
+                    slot.style.height = `${SLOT_HEIGHT}px`;
+                    slot.dataset.venueId = v.id;
+                    slot.dataset.startMin = m;
+
+                    // 僅支援「雙擊空白格子」建立新賽程，防止滑動或單擊誤觸
+                    slot.ondblclick = () => {
+                        if (state.role !== 'admin') return;
+                        createNewEventAt(v.id, m);
+                    };
+
+                    col.appendChild(slot);
+                }
+                gridContainer.appendChild(col);
+            });
+
+            if (dayEvents.length === 0) {
+                emptyHint.classList.remove('hidden');
+            } else {
+                emptyHint.classList.add('hidden');
+            }
+
+            // 2. 渲染賽程方塊（含跨場地合併、最高 z-30 浮動重疊檢錄壓層與聚焦高亮）
+            overlayLayer.innerHTML = '';
+            const sortedDayEvents = [...dayEvents].sort((a, b) => a.startMin - b.startMin);
+
+            sortedDayEvents.forEach(ev => {
+                const startIdx = Math.max(0, Math.round((ev.startMin - START_HOUR * 60) / STEP_MINUTES));
+                const durationSlots = Math.max(1, Math.round((ev.endMin - ev.startMin) / STEP_MINUTES));
+                const topPx = startIdx * SLOT_HEIGHT + 2;
+                const heightPx = Math.max(24, durationSlots * SLOT_HEIGHT - 4);
+
+                const venueIndices = (ev.venueIds || [ev.venueId || state.venues[0]?.id])
+                    .map(vid => state.venues.findIndex(v => v.id === vid))
+                    .filter(idx => idx !== -1)
+                    .sort((a, b) => a - b);
+
+                const minCol = venueIndices.length > 0 ? venueIndices[0] : 0;
+                const maxCol = venueIndices.length > 0 ? venueIndices[venueIndices.length - 1] : 0;
+                const spanCols = (maxCol - minCol) + 1;
+
+                const leftPct = (minCol / colCount) * 100;
+                const widthPct = (spanCols / colCount) * 100;
+
+                const isSelected = ev.id === state.selectedEventId;
+                const style = COLOR_THEMES[ev.color] || COLOR_THEMES.blue;
+                const isLiveRunning = (curLiveMin >= ev.startMin && curLiveMin < ev.endMin) && !ev.actualEndMin;
+                const isCompleted = Boolean(ev.actualEndMin);
+
+                const isFilterMatched = hasActiveFilter ? doesEventMatchActiveFilter(ev) : true;
+                const filterEffectClass = hasActiveFilter
+                    ? (isFilterMatched
+                        ? 'ring-2 ring-amber-500 shadow-lg z-30 scale-[1.01]'
+                        : 'opacity-25 saturate-0 transition-all')
+                    : '';
+                const ciFilterClass = (hasActiveFilter && !isFilterMatched) ? 'opacity-20 saturate-0' : '';
+
+                // 檢錄灰色緩衝區（若與前場比賽重疊，以最高 z-30 浮動壓在前方比賽尾端上）
+                const checkInOffset = ev.checkInOffsetMin || 0;
+                if (checkInOffset > 0) {
+                    const ciStartMin = Math.max(START_HOUR * 60, ev.startMin - checkInOffset);
+                    const ciStartIdx = Math.round((ciStartMin - START_HOUR * 60) / STEP_MINUTES);
+                    const ciSlots = Math.max(1, Math.round((ev.startMin - ciStartMin) / STEP_MINUTES));
+                    const ciTopPx = ciStartIdx * SLOT_HEIGHT + 1;
+                    const ciHeightPx = Math.max(16, ciSlots * SLOT_HEIGHT - 1);
+
+                    const isOverlapping = checkIfCheckInOverlaps(ev, ciStartMin);
+
+                    const ciBox = document.createElement('div');
+                    ciBox.style.position = 'absolute';
+                    ciBox.style.top = `${ciTopPx}px`;
+                    ciBox.style.height = `${ciHeightPx}px`;
+                    ciBox.style.left = `calc(${leftPct}% + 5px)`;
+                    ciBox.style.width = `calc(${widthPct}% - 10px)`;
+                    ciBox.className = `pointer-events-auto cursor-pointer rounded-t-lg px-2 flex items-center justify-between overflow-hidden transition-all ${ciFilterClass} ${isOverlapping ? 'checkin-overlap-zone border-2 border-amber-500 border-b-0 z-30' : 'checkin-buffer-zone border border-b-0 border-slate-300 z-10'}`;
+                    ciBox.title = isOverlapping
+                        ? `⚠️ 浮動檢錄區與前場賽程重疊（${minToTimeStr(ciStartMin)} ~ ${minToTimeStr(ev.startMin)}），已浮動置頂提醒`
+                        : `檢錄緩衝時間：${minToTimeStr(ciStartMin)} ~ ${minToTimeStr(ev.startMin)}（提早 ${checkInOffset} 分鐘）`;
+                    ciBox.onclick = (e) => { e.stopPropagation(); selectEvent(ev.id); };
+                    ciBox.innerHTML = `
+                        <span class="text-[10px] font-bold ${isOverlapping ? 'text-amber-800' : 'text-slate-600'} truncate">
+                            ${isOverlapping ? '⚠️ 重疊檢錄' : '檢錄'} ${minToTimeStr(ciStartMin)}
+                        </span>
+                        <span class="text-[9px] font-bold ${isOverlapping ? 'text-amber-700' : 'text-slate-400'} shrink-0">提早${checkInOffset}分</span>
+                    `;
+                    overlayLayer.appendChild(ciBox);
+                }
+
+                // 比賽主體方塊
+                const card = document.createElement('div');
+                card.style.position = 'absolute';
+                card.style.top = `${topPx}px`;
+                card.style.height = `${heightPx}px`;
+                card.style.left = `calc(${leftPct}% + 5px)`;
+                card.style.width = `calc(${widthPct}% - 10px)`;
+
+                const zIndexClass = isSelected ? 'z-20' : (isLiveRunning ? 'z-20' : 'z-10');
+                card.className = `event-card-item group pointer-events-auto cursor-pointer ${checkInOffset > 0 ? 'rounded-b-xl rounded-t-none' : 'rounded-xl'} border-2 ${style.border} ${style.bg} ${style.text} px-3 py-1.5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden ${zIndexClass} ${isSelected ? 'event-card-selected ring-2 ring-blue-500 ring-offset-1 shadow-md' : ''} ${isLiveRunning ? 'live-card-pulse ring-2 ring-rose-500' : ''} ${isCompleted ? 'opacity-80' : ''} ${filterEffectClass}`;
+
+                card.onclick = (e) => {
+                    e.stopPropagation();
+                    selectEvent(ev.id);
+                };
+
+                if (state.role === 'admin') {
+                    card.draggable = true;
+                    card.ondragstart = (e) => {
+                        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'MOVE_EVENT', eventId: ev.id }));
+                    };
+                }
+
+                const refSummary = (ev.referees || []).filter(r => r.name).map(r => `${r.role}:${r.name}`).join('、');
+                const hasAttachments = (ev.attachments || []).length > 0;
+                const venueLabelStr = spanCols > 1 ? `橫跨 ${(ev.venueIds || []).join('~')} 區` : '';
+
+                card.innerHTML = `
+                    ${state.role === 'admin' ? `
+                        <div class="resize-handle-top absolute top-0 left-0 right-0 h-2 cursor-ns-resize flex items-center justify-center z-20" onmousedown="startResizeEvent(event, '${ev.id}', 'top')" title="上下拖曳調整開始時間">
+                            <div class="w-8 h-1 rounded-full bg-slate-500/50"></div>
+                        </div>
+                    ` : ''}
+
+                    <div>
+                        <div class="flex items-center justify-between gap-1 mb-0.5">
+                            <div class="flex items-center gap-1 flex-wrap">
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${style.badge}">${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}</span>
+                                ${ev.linkPrev ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-indigo-600 text-white" title="已開啟磁吸：自動緊接前一場賽程">🧲磁吸</span>` : ''}
+                                ${isLiveRunning ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-600 text-white animate-pulse">進行中</span>` : ''}
+                                ${isCompleted ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-slate-600 text-white">已結束</span>` : ''}
+                            </div>
+                            <div class="flex items-center gap-1 shrink-0">
+                                ${hasAttachments ? `<span class="px-1 py-0.2 rounded bg-white/80 text-[9px] font-bold text-blue-700 border border-blue-200" title="附有道次表或選手名單">📎道次表</span>` : ''}
+                                ${venueLabelStr ? `<span class="text-[10px] font-extrabold opacity-75">${venueLabelStr}</span>` : ''}
+                                ${state.role === 'admin' ? `
+                                    <button onclick="deleteEventById('${ev.id}', event)" class="opacity-0 group-hover:opacity-100 p-0.5 rounded bg-white/90 hover:bg-rose-600 text-slate-500 hover:text-white transition-all shadow-2xs" title="刪除此賽程">
+                                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="text-sm font-extrabold leading-snug tracking-wide line-clamp-2 mt-0.5">${ev.title}</div>
+                    </div>
+
+                    ${heightPx >= 52 ? `
+                        <div class="text-[11px] opacity-85 truncate pt-1 border-t border-black/10 flex items-center justify-between gap-1">
+                            <span class="truncate font-medium">${refSummary ? `裁判：${refSummary}` : '點擊查看詳細配置'}</span>
+                            ${state.role !== 'teacher' && (ev.studentCount > 0 || ev.volunteerCount > 0) ? `<span class="font-bold shrink-0">公差${ev.studentCount}/志${ev.volunteerCount}</span>` : ''}
+                        </div>
+                    ` : ''}
+
+                    ${state.role === 'admin' ? `
+                        <div class="resize-handle-bottom absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize flex items-center justify-center z-20" onmousedown="startResizeEvent(event, '${ev.id}', 'bottom')" title="上下拖曳調整結束時間">
+                            <div class="w-8 h-1 rounded-full bg-slate-500/50"></div>
+                        </div>
+                    ` : ''}
+                `;
+
+                overlayLayer.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        // ==================== 12. 拖放建立 / 移動與邊緣上下拉伸時間邏輯 ====================
+        function handleToolboxDragStart(e) {
+            if (state.role !== 'admin') return;
+            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'NEW_EVENT' }));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvasContainer = document.getElementById('venuesCanvasContainer');
+            if (!canvasContainer) return;
+
+            canvasContainer.addEventListener('dragover', (e) => {
+                if (state.role !== 'admin') return;
+                e.preventDefault();
+                const slot = e.target.closest('.slot-dropzone');
+                document.querySelectorAll('.slot-drag-over').forEach(el => el.classList.remove('slot-drag-over'));
+                if (slot) slot.classList.add('slot-drag-over');
+            });
+
+            canvasContainer.addEventListener('dragleave', (e) => {
+                const slot = e.target.closest('.slot-dropzone');
+                if (slot) slot.classList.remove('slot-drag-over');
+            });
+
+            canvasContainer.addEventListener('drop', (e) => {
+                if (state.role !== 'admin') return;
+                e.preventDefault();
+                document.querySelectorAll('.slot-drag-over').forEach(el => el.classList.remove('slot-drag-over'));
+
+                const slot = e.target.closest('.slot-dropzone');
+                if (!slot) return;
+
+                const targetVenueId = slot.dataset.venueId;
+                const targetStartMin = parseInt(slot.dataset.startMin, 10);
+
+                try {
+                    const payload = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    if (payload.type === 'NEW_EVENT') {
+                        createNewEventAt(targetVenueId, targetStartMin);
+                    } else if (payload.type === 'MOVE_EVENT') {
+                        moveEventTo(payload.eventId, targetVenueId, targetStartMin);
+                    }
+                } catch (err) {}
+            });
+        });
+
+        function startResizeEvent(e, eventId, edge) {
+            if (state.role !== 'admin') return;
+            e.stopPropagation();
+            e.preventDefault();
+
+            const ev = state.events.find(item => item.id === eventId);
+            if (!ev) return;
+
+            const initialY = e.clientY;
+            const origStartMin = ev.startMin;
+            const origEndMin = ev.endMin;
+
+            const onMouseMove = (moveEvt) => {
+                const deltaY = moveEvt.clientY - initialY;
+                const deltaSlots = Math.round(deltaY / SLOT_HEIGHT);
+                const deltaMinutes = deltaSlots * STEP_MINUTES;
+
+                if (edge === 'top') {
+                    const nextStart = Math.max(START_HOUR * 60, Math.min(origEndMin - STEP_MINUTES, origStartMin + deltaMinutes));
+                    ev.startMin = nextStart;
+                } else {
+                    const prevEnd = ev.endMin;
+                    const nextEnd = Math.min(END_HOUR * 60, Math.max(origStartMin + STEP_MINUTES, origEndMin + deltaMinutes));
+                    ev.endMin = nextEnd;
+                    applyMagneticChain(ev.id, prevEnd, nextEnd);
+                }
+
+                renderCanvasGridAndEvents();
+                if (state.selectedEventId === ev.id) renderInspector();
+            };
+
+            const onMouseUp = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                saveToStorage();
+                showToast(`已調整時間：${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}`);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        }
+
+        function createNewEventAt(venueId, startMin) {
+            const newEv = {
+                id: 'ev-' + Date.now(),
+                dateId: state.currentDateId,
+                venueIds: [venueId],
+                startMin: startMin,
+                endMin: Math.min(END_HOUR * 60, startMin + 40),
+                checkInOffsetMin: 10,
+                linkPrev: false,
+                title: '新比賽項目（點擊右側修改名稱）',
+                color: 'blue',
+                referees: [{ role: '裁判長', name: '' }],
+                volunteerCount: 0,
+                volunteerTask: '',
+                studentCount: 0,
+                studentTask: '',
+                equipment: [],
+                laneNote: '',
+                attachments: [],
+                actualStartMin: null,
+                actualEndMin: null
+            };
+            state.events.push(newEv);
+            state.selectedEventId = newEv.id;
+            saveToStorage();
+            renderDateTree();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`已新增項目（${minToTimeStr(startMin)}）`);
+        }
+
+        function moveEventTo(eventId, newVenueId, newStartMin) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            const prevEnd = ev.endMin;
+            const duration = ev.endMin - ev.startMin;
+            const spanCount = (ev.venueIds || [newVenueId]).length;
+
+            const startIdx = state.venues.findIndex(v => v.id === newVenueId);
+            if (startIdx !== -1) {
+                const endIdx = Math.min(state.venues.length - 1, startIdx + spanCount - 1);
+                const newIds = [];
+                for (let i = startIdx; i <= endIdx; i++) newIds.push(state.venues[i].id);
+                ev.venueIds = newIds;
+            }
+
+            ev.startMin = newStartMin;
+            ev.endMin = Math.min(END_HOUR * 60, newStartMin + duration);
+            applyMagneticChain(ev.id, prevEnd, ev.endMin);
+
+            state.selectedEventId = ev.id;
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`已移動至 ${minToTimeStr(ev.startMin)}`);
+        }
+
+        function selectEvent(eventId) {
+            state.selectedEventId = eventId;
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function closeInspector() {
+            state.selectedEventId = null;
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function clearCurrentDateEvents() {
+            state.events = state.events.filter(e => e.dateId !== state.currentDateId);
+            state.selectedEventId = null;
+            saveToStorage();
+            renderDateTree();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已清空本日所有排程方塊');
+        }
+
+        function restoreBlackboardSample() {
+            state.venues = JSON.parse(JSON.stringify(DEFAULT_VENUES));
+            state.dates = JSON.parse(JSON.stringify(DEFAULT_DATES));
+            state.events = buildBlackboardSampleEvents();
+            state.selectedEventId = null;
+            saveToStorage();
+            renderVenuesHeader();
+            renderDateTree();
+            renderCommandDeck();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已載入五天份黑板完整賽程資料！');
+        }
+
+        // ==================== 13. 右欄：動態細節抽屜（支援完整上下捲動） ====================
+        function renderInspector() {
+            const aside = document.getElementById('rightInspector');
+            const container = document.getElementById('inspectorContent');
+            const ev = state.events.find(e => e.id === state.selectedEventId);
+
+            if (!ev) {
+                aside.classList.add('hidden');
+                aside.classList.remove('flex');
+                container.innerHTML = '';
+                return;
+            }
+
+            aside.classList.remove('hidden');
+            aside.classList.add('flex');
+
+            const venueNames = (ev.venueIds || []).map(vid => state.venues.find(v => v.id === vid)?.name || vid).join(' ＋ ');
+            const checkInOffset = ev.checkInOffsetMin || 0;
+            const checkInStartStr = checkInOffset > 0 ? minToTimeStr(Math.max(START_HOUR * 60, ev.startMin - checkInOffset)) : '無提早緩衝';
+            const curLiveMin = getCurrentLiveMinutes();
+
+            // ---------- 模式 A：管理者可編輯表單 ----------
+            if (state.role === 'admin') {
+                container.innerHTML = `
+                    <div class="px-4 py-3 border-b border-slate-100 bg-blue-50/60 flex items-center justify-between shrink-0">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                            <span class="text-xs font-bold text-blue-900">管理者編輯面板</span>
+                        </div>
+                        <button onclick="closeInspector()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg" title="收起細節面板">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-5 min-h-0">
+
+                        <!-- 0. 現場賽務即時調度台 -->
+                        <div class="p-3 rounded-2xl bg-gradient-to-br from-rose-50 to-amber-50/70 border border-rose-200/80 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-extrabold text-rose-800 flex items-center gap-1">
+                                    <i data-lucide="radio" class="w-3.5 h-3.5 text-rose-600"></i> 現場賽務即時調度
+                                </span>
+                                <span class="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded-md border border-rose-200 text-rose-700">
+                                    現場 ${minToTimeStr(curLiveMin)}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="triggerLiveActualStart('${ev.id}')" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs transition-colors">
+                                    <i data-lucide="play" class="w-3 h-3"></i>
+                                    <span>實際開賽 (順移)</span>
+                                </button>
+                                <button onclick="triggerLiveActualEnd('${ev.id}')" class="flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs transition-colors">
+                                    <i data-lucide="square" class="w-3 h-3"></i>
+                                    <span>實際結束 (縮放)</span>
+                                </button>
+                            </div>
+
+                            ${(ev.actualStartMin || ev.actualEndMin) ? `
+                                <div class="text-[10px] text-slate-600 bg-white/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                                    <span>
+                                        ${ev.actualStartMin ? `實開：<b>${minToTimeStr(ev.actualStartMin)}</b> ` : ''}
+                                        ${ev.actualEndMin ? `實畢：<b>${minToTimeStr(ev.actualEndMin)}</b> (歷時${ev.endMin - ev.startMin}分)` : ''}
+                                    </span>
+                                    <button onclick="resetLiveActualRecords('${ev.id}')" class="text-rose-600 hover:underline font-semibold">清除紀錄</button>
+                                </div>
+                            ` : ''}
+
+                            ${ev.actualStartMin && !ev.actualEndMin ? `
+                                <button onclick="cascadeDelaySubsequentEvents('${ev.id}')" class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold shadow-xs transition-colors">
+                                    <i data-lucide="arrow-down-to-line" class="w-3.5 h-3.5"></i>
+                                    <span>順延本場地後續未進行賽程</span>
+                                </button>
+                            ` : ''}
+                        </div>
+
+                        <!-- 1. 比賽項目名稱與卡片色系 -->
+                        <div class="space-y-2.5">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">比賽 / 活動項目名稱</label>
+                                <input type="text" value="${ev.title}" oninput="updateEventField('${ev.id}', 'title', this.value)" class="w-full px-3 py-2 text-sm font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">方塊外框色系</label>
+                                <div class="flex items-center gap-2">
+                                    ${Object.keys(COLOR_THEMES).map(c => {
+                                        const bgMap = { blue: 'bg-blue-500', emerald: 'bg-emerald-500', amber: 'bg-amber-500', rose: 'bg-rose-500', purple: 'bg-purple-500' };
+                                        const isActive = ev.color === c;
+                                        return `<button onclick="updateEventField('${ev.id}', 'color', '${c}')" class="w-6 h-6 rounded-full ${bgMap[c]} ${isActive ? 'ring-2 ring-offset-2 ring-slate-800 scale-110' : 'opacity-70 hover:opacity-100'} transition-all"></button>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. 涵蓋場地（支援跨場地橫向合併） -->
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-700">涵蓋場地（可多選橫跨）</span>
+                                <button onclick="toggleFullSpanVenues('${ev.id}')" class="text-[11px] font-bold text-indigo-600 hover:underline">
+                                    一鍵橫跨 A~E
+                                </button>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                ${state.venues.map(v => {
+                                    const isChecked = (ev.venueIds || []).includes(v.id);
+                                    return `
+                                        <button onclick="toggleEventVenue('${ev.id}', '${v.id}')" class="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${isChecked ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}">
+                                            ${v.name}
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 3. 時間控制 ＋ 灰色檢錄緩衝帶 ＋ 雙向磁吸設定 -->
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                            <div class="text-xs font-bold text-slate-700">時間軸、檢錄灰色地帶與磁吸連鎖</div>
+
+                            <!-- 檢錄提早分鐘數（10分鐘步進器） -->
+                            <div class="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
+                                <div>
+                                    <div class="text-[11px] font-bold text-slate-700">提早幾分鐘檢錄（灰色區）</div>
+                                    <div class="text-[10px] text-slate-400">區間：${checkInOffset > 0 ? `${checkInStartStr} ~ ${minToTimeStr(ev.startMin)}` : '未開啟'}</div>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="adjustCheckInOffset('${ev.id}', -10)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center">-</button>
+                                    <span class="w-12 text-center text-xs font-extrabold text-slate-800">${checkInOffset} 分</span>
+                                    <button onclick="adjustCheckInOffset('${ev.id}', 10)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center">+</button>
+                                </div>
+                            </div>
+
+                            <!-- 雙向磁吸接續開關 -->
+                            <label class="flex items-center justify-between bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-200/80 cursor-pointer">
+                                <div>
+                                    <div class="text-[11px] font-bold text-indigo-900">🧲 磁吸接續上一場賽程</div>
+                                    <div class="text-[10px] text-indigo-600">前場提早結束或延後時，本場自動上下浮動黏合</div>
+                                </div>
+                                <input type="checkbox" ${ev.linkPrev ? 'checked' : ''} onchange="updateEventField('${ev.id}', 'linkPrev', this.checked)" class="w-4 h-4 accent-indigo-600 rounded cursor-pointer">
+                            </label>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Start 開始</label>
+                                    <select onchange="updateEventStartTime('${ev.id}', parseInt(this.value))" class="w-full px-2 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg">
+                                        ${generateTimeOptionsHtml(ev.startMin, START_HOUR * 60, END_HOUR * 60 - 10)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">End 結束</label>
+                                    <select onchange="updateEventEndTime('${ev.id}', parseInt(this.value))" class="w-full px-2 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg">
+                                        ${generateTimeOptionsHtml(ev.endMin, ev.startMin + 10, END_HOUR * 60)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. 道次表、背心顏色與選手名單附件（導師端可見） -->
+                        <div class="p-3 rounded-xl bg-blue-50/40 border border-blue-200/80 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-blue-900 flex items-center gap-1">
+                                    <i data-lucide="file-image" class="w-3.5 h-3.5 text-blue-600"></i> 道次表 / 選手名單（導師可見）
+                                </span>
+                                <label class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-2xs transition-colors">
+                                    <i data-lucide="upload" class="w-3 h-3"></i>
+                                    <span>上傳圖片/PDF</span>
+                                    <input type="file" accept="image/*,.pdf" multiple class="hidden" onchange="handleAttachmentUpload(event, '${ev.id}')">
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">道次與背心顏色 / 檢錄注意事項</label>
+                                <textarea rows="2" oninput="updateEventField('${ev.id}', 'laneNote', this.value)" placeholder="例如：第1道紅、第2道黃、第3道藍；最後一棒穿白色背心" class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">${ev.laneNote || ''}</textarea>
+                            </div>
+
+                            ${(ev.attachments && ev.attachments.length > 0) ? `
+                                <div class="space-y-1.5 pt-1">
+                                    ${ev.attachments.map((att, idx) => `
+                                        <div class="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                                            <button onclick="openAttachmentPreview('${ev.id}', ${idx})" class="flex items-center gap-1.5 text-blue-600 hover:underline font-semibold truncate text-left">
+                                                <i data-lucide="${att.type === 'pdf' ? 'file-text' : 'image'}" class="w-3.5 h-3.5 shrink-0"></i>
+                                                <span class="truncate">${att.name}</span>
+                                            </button>
+                                            <button onclick="removeAttachment('${ev.id}', ${idx})" class="text-slate-400 hover:text-rose-600 p-0.5 shrink-0" title="移除附件">
+                                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `<p class="text-[10px] text-slate-400">尚未上傳道次表或選手名單圖檔</p>`}
+                        </div>
+
+                        <!-- 5. 裁判工作項目動態配置 -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-700">裁判工作分配（導師可見）</span>
+                                <button onclick="addRefereeRow('${ev.id}', '', '')" class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 px-2 py-0.5 rounded-lg">
+                                    <i data-lucide="plus" class="w-3 h-3"></i> 新增一列
+                                </button>
+                            </div>
+
+                            <div class="flex flex-wrap gap-1">
+                                ${REFEREE_ROLE_PRESETS.map(roleName => `
+                                    <button onclick="addRefereeRow('${ev.id}', '${roleName}', '')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 transition-colors">
+                                        + ${roleName}
+                                    </button>
+                                `).join('')}
+                            </div>
+
+                            <div class="space-y-1.5 pt-1">
+                                ${(ev.referees || []).map((ref, idx) => `
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="text" value="${ref.role}" oninput="updateRefereeRow('${ev.id}', ${idx}, 'role', this.value)" placeholder="職務(如:丈量)" class="w-24 px-2 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <input type="text" value="${ref.name}" oninput="updateRefereeRow('${ev.id}', ${idx}, 'name', this.value)" placeholder="老師姓名" class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        <button onclick="removeRefereeRow('${ev.id}', ${idx})" class="p-1 text-slate-400 hover:text-rose-500 rounded-lg" title="刪除此職務">
+                                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 6. 志工與公差班學生（僅工作人員與管理者可見） -->
+                        <div class="p-3 rounded-xl bg-amber-50/50 border border-amber-200/60 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-amber-900">志工與公差班學生</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">導師端自動隱藏</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 items-center">
+                                <label class="text-xs font-semibold text-slate-600">志工 (人)</label>
+                                <input type="number" min="0" value="${ev.volunteerCount || 0}" oninput="updateEventField('${ev.id}', 'volunteerCount', parseInt(this.value)||0)" class="col-span-2 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg">
+                            </div>
+                            <input type="text" value="${ev.volunteerTask || ''}" oninput="updateEventField('${ev.id}', 'volunteerTask', this.value)" placeholder="志工任務內容（如：終點拉線、安全維護）" class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg">
+
+                            <div class="grid grid-cols-3 gap-2 items-center pt-1">
+                                <label class="text-xs font-semibold text-slate-600">公差學生 (人)</label>
+                                <input type="number" min="0" value="${ev.studentCount || 0}" oninput="updateEventField('${ev.id}', 'studentCount', parseInt(this.value)||0)" class="col-span-2 px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg">
+                            </div>
+                            <input type="text" value="${ev.studentTask || ''}" oninput="updateEventField('${ev.id}', 'studentTask', this.value)" placeholder="公差學生任務（如：跳高組撿橫桿、撿球）" class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg">
+                        </div>
+
+                        <!-- 7. Checklist 器材清單（僅工作人員與管理者可見） -->
+                        <div class="space-y-2 pb-4">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-700">Checklist 器材清單</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-semibold">導師端自動隱藏</span>
+                            </div>
+
+                            <div class="flex flex-wrap gap-1.5">
+                                ${EQUIPMENT_PRESETS.map(eq => {
+                                    const hasEq = (ev.equipment || []).includes(eq);
+                                    return `<button onclick="toggleEquipmentPreset('${ev.id}', '${eq}')" class="text-[11px] px-2 py-1 rounded-lg border transition-colors ${hasEq ? 'bg-blue-600 text-white border-blue-600 font-semibold' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}">${hasEq ? '✓ ' : '+ '}${eq}</button>`;
+                                }).join('')}
+                            </div>
+
+                            <div class="flex gap-1.5 pt-1">
+                                <input type="text" id="customEqInput" placeholder="輸入其他自訂器材..." class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onkeydown="if(event.key==='Enter') addCustomEquipment('${ev.id}')">
+                                <button onclick="addCustomEquipment('${ev.id}')" class="px-3 py-1.5 bg-slate-800 text-white text-xs font-semibold rounded-lg hover:bg-slate-700">新增</button>
+                            </div>
+
+                            <div class="space-y-1 pt-1">
+                                ${(ev.equipment || []).map((eq, idx) => `
+                                    <div class="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/70 text-xs">
+                                        <span class="font-medium text-slate-700">☑ ${eq}</span>
+                                        <button onclick="removeEquipment('${ev.id}', ${idx})" class="text-slate-400 hover:text-rose-500">
+                                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 底部快捷操作列 -->
+                    <div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
+                        <button onclick="duplicateEvent('${ev.id}')" class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> 複製此項
+                        </button>
+                        <button onclick="deleteEventById('${ev.id}')" class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-xs font-semibold text-rose-600">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 刪除此項
+                        </button>
+                    </div>
+                `;
+            }
+
+            // ---------- 模式 B：工作人員（唯讀・完整細節版） ----------
+            else if (state.role === 'staff') {
+                const validRefs = (ev.referees || []).filter(r => r.role || r.name);
+                container.innerHTML = `
+                    <div class="px-4 py-3 border-b border-amber-100 bg-amber-50/70 flex items-center justify-between shrink-0">
+                        <span class="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[11px] font-bold">工作人員・完整執行視角</span>
+                        <button onclick="closeInspector()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+                        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                            <div class="text-xs font-bold text-amber-700 mb-1">${venueNames}</div>
+                            <h3 class="text-base font-extrabold text-slate-900 leading-snug mb-3">${ev.title}</h3>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="bg-white p-2 rounded-xl border border-slate-200/80">
+                                    <div class="text-[10px] text-slate-400">檢錄緩衝區 (提早${checkInOffset}分)</div>
+                                    <div class="font-bold text-slate-700 mt-0.5">${checkInOffset > 0 ? `${checkInStartStr} ~ ${minToTimeStr(ev.startMin)}` : '無'}</div>
+                                </div>
+                                <div class="bg-white p-2 rounded-xl border border-slate-200/80">
+                                    <div class="text-[10px] text-slate-400">正式比賽時段</div>
+                                    <div class="font-bold text-blue-700 mt-0.5">${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${renderReadOnlyAttachmentsBlock(ev)}
+
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                                <i data-lucide="award" class="w-3.5 h-3.5 text-blue-600"></i> 裁判工作配置
+                            </h4>
+                            <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
+                                ${validRefs.length === 0 ? `<div class="p-3 text-slate-400">尚未登錄裁判名單</div>` : validRefs.map(r => `
+                                    <div class="p-2.5 flex justify-between">
+                                        <span class="text-slate-500 font-semibold">${r.role || '裁判'}</span>
+                                        <span class="font-bold text-slate-800">${r.name || '待定'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                                <i data-lucide="users" class="w-3.5 h-3.5 text-amber-600"></i> 志工與公差班任務
+                            </h4>
+                            <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200/70 space-y-2 text-xs">
+                                <div>
+                                    <span class="font-bold text-amber-900">愛心志工 (${ev.volunteerCount || 0} 人)：</span>
+                                    <span class="text-slate-700">${ev.volunteerTask || '無特殊任務'}</span>
+                                </div>
+                                <div>
+                                    <span class="font-bold text-amber-900">公差學生 (${ev.studentCount || 0} 人)：</span>
+                                    <span class="text-slate-700">${ev.studentTask || '無特殊任務'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pb-4">
+                            <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                                <i data-lucide="check-square" class="w-3.5 h-3.5 text-emerald-600"></i> 場地器材 Checklist
+                            </h4>
+                            ${(ev.equipment && ev.equipment.length > 0) ? `
+                                <ul class="space-y-1.5">
+                                    ${ev.equipment.map(eq => `<li class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">☑ ${eq}</li>`).join('')}
+                                </ul>
+                            ` : `<p class="text-xs text-slate-400">本項目無需額外搬運器材</p>`}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // ---------- 模式 C：班級導師（唯讀・極簡織浪視角） ----------
+            else {
+                const validRefs = (ev.referees || []).filter(r => r.role || r.name);
+                container.innerHTML = `
+                    <div class="px-4 py-3 border-b border-emerald-100 bg-emerald-50/70 flex items-center justify-between shrink-0">
+                        <span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold">導師・精簡視角</span>
+                        <button onclick="closeInspector()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+                        <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200">
+                            <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-bold mb-2">
+                                <i data-lucide="map-pin" class="w-3 h-3"></i> ${venueNames}
+                            </div>
+                            <h3 class="text-lg font-extrabold text-slate-900 leading-snug mb-3">${ev.title}</h3>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <div class="bg-slate-100 p-2.5 rounded-xl border border-slate-300/80">
+                                    <div class="text-[11px] font-semibold text-slate-500">檢錄緩衝區 (提早${checkInOffset}分)</div>
+                                    <div class="text-sm font-extrabold text-slate-800 mt-0.5">${checkInOffset > 0 ? `${checkInStartStr} ~ ${minToTimeStr(ev.startMin)}` : '依廣播'}</div>
+                                </div>
+                                <div class="bg-white p-2.5 rounded-xl border border-blue-200 shadow-2xs">
+                                    <div class="text-[11px] font-semibold text-blue-600">正式比賽時段</div>
+                                    <div class="text-sm font-extrabold text-blue-900 mt-0.5">${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${renderReadOnlyAttachmentsBlock(ev)}
+
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                                <i data-lucide="award" class="w-3.5 h-3.5 text-blue-600"></i> 本場次裁判分工名單
+                            </h4>
+                            <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
+                                ${validRefs.length === 0 ? `<div class="p-3 text-slate-400">尚未公布裁判名單</div>` : validRefs.map(r => `
+                                    <div class="p-2.5 flex justify-between">
+                                        <span class="text-slate-500 font-semibold">${r.role || '裁判'}</span>
+                                        <span class="font-bold text-slate-800">${r.name || '待定'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200/60 text-xs text-amber-800 leading-relaxed">
+                            <div class="font-bold mb-1 flex items-center gap-1">
+                                <i data-lucide="info" class="w-3.5 h-3.5"></i> 導師帶班提醒
+                            </div>
+                            畫布上的灰色斜線區（${checkInOffset > 0 ? `${checkInStartStr} ~ ${minToTimeStr(ev.startMin)}` : '開賽前'}）為檢錄集合緩衝時間，請準時帶選手至 <b>${venueNames}</b> 檢錄，並預留時間拍照加油！
+                        </div>
+                    </div>
+                `;
+            }
+
+            lucide.createIcons();
+        }
+
+        function renderReadOnlyAttachmentsBlock(ev) {
+            const hasNote = Boolean(ev.laneNote && ev.laneNote.trim());
+            const hasFiles = Boolean(ev.attachments && ev.attachments.length > 0);
+            return `
+                <div>
+                    <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-indigo-600"></i> 道次表、背心顏色與選手名單
+                    </h4>
+                    <div class="p-3 rounded-xl bg-indigo-50/50 border border-indigo-200/80 space-y-2 text-xs">
+                        ${hasNote ? `<div class="text-slate-800 font-medium leading-relaxed bg-white p-2.5 rounded-lg border border-indigo-100">${ev.laneNote}</div>` : ''}
+                        ${hasFiles ? `
+                            <div class="space-y-1.5">
+                                ${ev.attachments.map((att, idx) => `
+                                    <button onclick="openAttachmentPreview('${ev.id}', ${idx})" class="w-full flex items-center justify-between bg-white hover:bg-blue-50 px-3 py-2 rounded-lg border border-blue-200 text-blue-700 font-bold transition-colors">
+                                        <span class="flex items-center gap-1.5 truncate">
+                                            <i data-lucide="${att.type === 'pdf' ? 'file-text' : 'image'}" class="w-4 h-4 shrink-0"></i>
+                                            <span class="truncate">${att.name}</span>
+                                        </span>
+                                        <span class="text-[11px] bg-blue-100 px-2 py-0.5 rounded shrink-0">點擊檢視</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        ${(!hasNote && !hasFiles) ? `<div class="text-slate-400 text-[11px]">本場次尚未上傳道次表或名單附件</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 14. 現場賽務即時調度邏輯 ====================
+        function triggerLiveActualStart(eventId) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+
+            const curMin = getCurrentLiveMinutes();
+            const snappedStart = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - 20, Math.round(curMin / 10) * 10));
+            const duration = ev.endMin - ev.startMin;
+            const prevEnd = ev.endMin;
+
+            ev.actualStartMin = curMin;
+            ev.startMin = snappedStart;
+            ev.endMin = Math.min(END_HOUR * 60, snappedStart + duration);
+            ev.actualEndMin = null;
+
+            applyMagneticChain(ev.id, prevEnd, ev.endMin);
+
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`▶ 已記錄實際開賽 (${minToTimeStr(curMin)})，賽程順移至 ${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}`);
+        }
+
+        function triggerLiveActualEnd(eventId) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+
+            const curMin = getCurrentLiveMinutes();
+            const snappedEnd = Math.max(ev.startMin + 10, Math.min(END_HOUR * 60, Math.round(curMin / 10) * 10));
+            const prevEnd = ev.endMin;
+
+            ev.actualEndMin = curMin;
+            ev.endMin = snappedEnd;
+
+            applyMagneticChain(ev.id, prevEnd, snappedEnd);
+
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast(`■ 已記錄實際結束 (${minToTimeStr(curMin)})，後續磁吸賽程已自動向上接續！`);
+        }
+
+        function resetLiveActualRecords(eventId) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            ev.actualStartMin = null;
+            ev.actualEndMin = null;
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已清除現場實測紀錄');
+        }
+
+        function cascadeDelaySubsequentEvents(eventId) {
+            const anchorEv = state.events.find(e => e.id === eventId);
+            if (!anchorEv) return;
+
+            const primaryVenue = (anchorEv.venueIds || ['A'])[0];
+            const sameVenueEvents = state.events
+                .filter(e => e.dateId === anchorEv.dateId && e.id !== anchorEv.id && (e.venueIds || ['A'])[0] === primaryVenue)
+                .sort((a, b) => a.startMin - b.startMin);
+
+            let cursorEnd = anchorEv.endMin;
+            let shiftedCount = 0;
+
+            sameVenueEvents.forEach(nextEv => {
+                if (nextEv.startMin >= anchorEv.startMin - 30 && nextEv.startMin < cursorEnd) {
+                    const dur = nextEv.endMin - nextEv.startMin;
+                    nextEv.startMin = cursorEnd;
+                    nextEv.endMin = Math.min(END_HOUR * 60, nextEv.startMin + dur);
+                    cursorEnd = nextEv.endMin;
+                    shiftedCount++;
+                } else if (nextEv.startMin >= cursorEnd) {
+                    cursorEnd = nextEv.endMin;
+                }
+            });
+
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            if (shiftedCount > 0) {
+                showToast(`已自動順延本場地後續 ${shiftedCount} 場賽程！`);
+            } else {
+                showToast('後方賽程時間充裕，無需順延');
+            }
+        }
+
+        // ==================== 15. 道次表圖片壓縮與 PDF 上傳/預覽 ====================
+        function handleAttachmentUpload(e, eventId) {
+            const files = Array.from(e.target.files || []);
+            if (files.length === 0) return;
+
+            const ev = state.events.find(item => item.id === eventId);
+            if (!ev) return;
+            if (!ev.attachments) ev.attachments = [];
+
+            files.forEach(file => {
+                if (file.type === 'application/pdf') {
+                    if (file.size > 1.8 * 1024 * 1024) {
+                        showToast('PDF 檔案超過 1.8MB，建議轉為圖片或壓縮後上傳');
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        ev.attachments.push({ name: file.name, type: 'pdf', dataUrl: evt.target.result });
+                        saveToStorage();
+                        renderCanvasGridAndEvents();
+                        renderInspector();
+                        showToast(`已上傳 PDF：${file.name}`);
+                    };
+                    reader.readAsDataURL(file);
+                } else if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const maxDim = 1280;
+                            let w = img.width, h = img.height;
+                            if (w > maxDim || h > maxDim) {
+                                if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                                else { w = Math.round(w * maxDim / h); h = maxDim; }
+                            }
+                            canvas.width = w;
+                            canvas.height = h;
+                            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
+                            ev.attachments.push({ name: file.name, type: 'image', dataUrl: compressedDataUrl });
+                            saveToStorage();
+                            renderCanvasGridAndEvents();
+                            renderInspector();
+                            showToast(`已上傳道次圖：${file.name}`);
+                        };
+                        img.src = evt.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            e.target.value = '';
+        }
+
+        function removeAttachment(eventId, idx) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev || !ev.attachments) return;
+            ev.attachments.splice(idx, 1);
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已移除附件');
+        }
+
+        function openAttachmentPreview(eventId, idx) {
+            const ev = state.events.find(e => e.id === eventId);
+            const att = ev?.attachments?.[idx];
+            if (!att) return;
+
+            document.getElementById('previewModalTitle').textContent = `${ev.title} — ${att.name}`;
+            const body = document.getElementById('previewModalBody');
+
+            if (att.type === 'pdf') {
+                body.innerHTML = `<iframe src="${att.dataUrl}" class="w-full h-[75vh] rounded-xl bg-white"></iframe>`;
+            } else {
+                body.innerHTML = `<img src="${att.dataUrl}" alt="${att.name}" class="max-w-full max-h-[75vh] object-contain rounded-xl shadow-lg">`;
+            }
+
+            document.getElementById('attachmentPreviewModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeAttachmentPreview() {
+            document.getElementById('attachmentPreviewModal').classList.add('hidden');
+            document.getElementById('previewModalBody').innerHTML = '';
+        }
+
+        // ==================== 16. 細節欄位資料更新輔助函式 ====================
+        function updateEventField(eventId, field, value) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            ev[field] = value;
+            saveToStorage();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+        }
+
+        function updateEventStartTime(eventId, newStart) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            const prevEnd = ev.endMin;
+            const dur = ev.endMin - ev.startMin;
+            ev.startMin = newStart;
+            ev.endMin = Math.min(END_HOUR * 60, newStart + dur);
+            applyMagneticChain(ev.id, prevEnd, ev.endMin);
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function updateEventEndTime(eventId, newEnd) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            const prevEnd = ev.endMin;
+            ev.endMin = newEnd;
+            applyMagneticChain(ev.id, prevEnd, newEnd);
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function adjustCheckInOffset(eventId, delta) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            ev.checkInOffsetMin = Math.max(0, Math.min(90, (ev.checkInOffsetMin || 0) + delta));
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function toggleEventVenue(eventId, venueId) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            let list = [...(ev.venueIds || [])];
+            if (list.includes(venueId)) {
+                if (list.length === 1) { showToast('至少需保留一個場地'); return; }
+                list = list.filter(id => id !== venueId);
+            } else {
+                list.push(venueId);
+            }
+            ev.venueIds = list;
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function toggleFullSpanVenues(eventId) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            const aeIds = state.venues.slice(0, Math.min(5, state.venues.length)).map(v => v.id);
+            const isAlreadyFull = ev.venueIds.length === aeIds.length && aeIds.every(id => ev.venueIds.includes(id));
+            ev.venueIds = isAlreadyFull ? [aeIds[0]] : aeIds;
+            saveToStorage();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function addRefereeRow(eventId, role, name) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            if (!ev.referees) ev.referees = [];
+            ev.referees.push({ role, name });
+            saveToStorage();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function updateRefereeRow(eventId, idx, key, val) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev || !ev.referees[idx]) return;
+            ev.referees[idx][key] = val;
+            saveToStorage();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+        }
+
+        function removeRefereeRow(eventId, idx) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev || !ev.referees) return;
+            ev.referees.splice(idx, 1);
+            saveToStorage();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+        }
+
+        function toggleEquipmentPreset(eventId, eqName) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            if (!ev.equipment) ev.equipment = [];
+            const idx = ev.equipment.indexOf(eqName);
+            if (idx > -1) ev.equipment.splice(idx, 1);
+            else ev.equipment.push(eqName);
+            saveToStorage();
+            renderInspector();
+        }
+
+        function addCustomEquipment(eventId) {
+            const input = document.getElementById('customEqInput');
+            const val = input.value.trim();
+            if (!val) return;
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev) return;
+            if (!ev.equipment) ev.equipment = [];
+            ev.equipment.push(val);
+            saveToStorage();
+            renderInspector();
+        }
+
+        function removeEquipment(eventId, idx) {
+            const ev = state.events.find(e => e.id === eventId);
+            if (!ev || !ev.equipment) return;
+            ev.equipment.splice(idx, 1);
+            saveToStorage();
+            renderInspector();
+        }
+
+        function duplicateEvent(eventId) {
+            const orig = state.events.find(e => e.id === eventId);
+            if (!orig) return;
+            const dur = orig.endMin - orig.startMin;
+            const copy = JSON.parse(JSON.stringify(orig));
+            copy.id = 'ev-' + Date.now();
+            copy.title = orig.title + ' (複製)';
+            copy.startMin = Math.min(END_HOUR * 60 - dur, orig.endMin);
+            copy.endMin = Math.min(END_HOUR * 60, copy.startMin + dur);
+            copy.actualStartMin = null;
+            copy.actualEndMin = null;
+            state.events.push(copy);
+            state.selectedEventId = copy.id;
+            saveToStorage();
+            renderDateTree();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已複製賽程方塊');
+        }
+
+        function deleteEventById(eventId, e) {
+            if (e) e.stopPropagation();
+            state.events = state.events.filter(item => item.id !== eventId);
+            if (state.selectedEventId === eventId) state.selectedEventId = null;
+            saveToStorage();
+            renderDateTree();
+            renderPersonFilterBar();
+            renderCanvasGridAndEvents();
+            renderInspector();
+            showToast('已刪除該賽程方塊');
+        }
+
+        // ==================== 17. 現代化運動會細流表生成與雙格式輸出 ====================
+        function openRundownModal() {
+            state.rundownScope = 'current';
+            document.getElementById('rundownModal').classList.remove('hidden');
+            renderRundownContent();
+            lucide.createIcons();
+        }
+
+        function closeRundownModal() {
+            document.getElementById('rundownModal').classList.add('hidden');
+        }
+
+        function setRundownScope(scope) {
+            state.rundownScope = scope;
+            const btnCur = document.getElementById('rundown-scope-current');
+            const btnAll = document.getElementById('rundown-scope-all');
+            if (scope === 'current') {
+                btnCur.className = 'px-3 py-1 rounded-lg bg-white text-slate-900 shadow-xs';
+                btnAll.className = 'px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900';
+            } else {
+                btnAll.className = 'px-3 py-1 rounded-lg bg-white text-slate-900 shadow-xs';
+                btnCur.className = 'px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900';
+            }
+            renderRundownContent();
+        }
+
+        function updateGeneralStaff(dateId, field, value) {
+            const d = state.dates.find(item => item.id === dateId);
+            if (!d) return;
+            if (!d.generalStaff) d.generalStaff = { hosts: '', recorders: '', stageControl: '' };
+            d.generalStaff[field] = value;
+            saveToStorage();
+        }
+
+        function renderRundownContent() {
+            const container = document.getElementById('rundownPrintArea');
+            const targetDates = state.rundownScope === 'current'
+                ? state.dates.filter(d => d.id === state.currentDateId)
+                : state.dates;
+
+            const stripeColorMap = {
+                blue: 'border-l-blue-500',
+                emerald: 'border-l-emerald-500',
+                amber: 'border-l-amber-500',
+                rose: 'border-l-rose-500',
+                purple: 'border-l-purple-500'
+            };
+
+            container.innerHTML = targetDates.map((d, dIdx) => {
+                const dayEvents = state.events
+                    .filter(e => e.dateId === d.id)
+                    .sort((a, b) => a.startMin - b.startMin);
+
+                const gs = d.generalStaff || { hosts: '', recorders: '', stageControl: '' };
+                const cmdSlots = [...(d.commandSlots || [])].sort((a, b) => a.startMin - b.startMin);
+
+                return `
+                    <section class="${dIdx > 0 ? 'pt-8 border-t-2 border-dashed border-slate-300 break-before-page' : ''}">
+                        <div class="flex flex-wrap items-end justify-between gap-2 pb-3 border-b-2 border-slate-900 mb-4">
+                            <div>
+                                <span class="text-xs font-extrabold uppercase tracking-wider text-blue-600">${d.category}</span>
+                                <h2 class="text-xl font-black text-slate-900 tracking-tight mt-0.5">${d.label} — 賽務工作細流表</h2>
+                            </div>
+                            <span class="text-xs font-semibold text-slate-500">共計 ${dayEvents.length} 項賽程</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-500 mb-1">🎙️ 主持人 / 司儀播報</label>
+                                <input type="text" value="${gs.hosts || ''}" oninput="updateGeneralStaff('${d.id}', 'hosts', this.value)" placeholder="輸入主持人名單..." class="w-full px-2.5 py-1 text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-500 mb-1">📋 大會紀錄與成績公告</label>
+                                <input type="text" value="${gs.recorders || ''}" oninput="updateGeneralStaff('${d.id}', 'recorders', this.value)" placeholder="輸入紀錄組名單..." class="w-full px-2.5 py-1 text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-500 mb-1">🎬 場控 / 攝影志工</label>
+                                <input type="text" value="${gs.stageControl || ''}" oninput="updateGeneralStaff('${d.id}', 'stageControl', this.value)" placeholder="輸入場控與志工..." class="w-full px-2.5 py-1 text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+
+                        ${(d.commandDeckEnabled && cmdSlots.length > 0) ? `
+                            <div class="mb-4 p-3 rounded-xl bg-amber-50/70 border border-amber-200">
+                                <div class="text-xs font-extrabold text-amber-900 mb-2">🎙️ 司令台中控分時段任務（播報輪班 / 比賽進行中穿插頒獎）</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    ${cmdSlots.map(s => `
+                                        <div class="bg-white px-3 py-2 rounded-lg border border-amber-200/80 text-xs">
+                                            <div class="flex items-center justify-between font-bold text-amber-800 mb-0.5">
+                                                <span>${s.type === 'award' ? '🏆 穿插頒獎' : s.type === 'record' ? '📋 成績公告' : '🎙️ 司儀播報'}</span>
+                                                <span class="font-mono">${minToTimeStr(s.startMin)} - ${minToTimeStr(s.endMin)}</span>
+                                            </div>
+                                            <div class="font-bold text-slate-800">${s.staff || ''}</div>
+                                            <div class="text-[11px] text-slate-600">${s.content || ''}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${dayEvents.length === 0 ? `
+                            <div class="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">本日尚未排入任何賽程項目</div>
+                        ` : `
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                        <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                                            <th class="py-2.5 px-3 w-36">時間軸 (檢錄/開賽)</th>
+                                            <th class="py-2.5 px-3 w-48">比賽項目與場地</th>
+                                            <th class="py-2.5 px-3">人力配置（裁判分工 / 公差學生 / 志工）</th>
+                                            <th class="py-2.5 px-3 w-56">器材準備與道次備註</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-200">
+                                        ${dayEvents.map(ev => {
+                                            const ciOffset = ev.checkInOffsetMin || 0;
+                                            const ciStr = ciOffset > 0 ? `${minToTimeStr(Math.max(START_HOUR * 60, ev.startMin - ciOffset))} 檢錄` : '無提前檢錄';
+                                            const venueNames = (ev.venueIds || []).map(vid => state.venues.find(v => v.id === vid)?.name || vid).join('、');
+                                            const validRefs = (ev.referees || []).filter(r => r.role || r.name);
+                                            const stripeClass = stripeColorMap[ev.color] || 'border-l-blue-500';
+
+                                            return `
+                                                <tr class="hover:bg-slate-50/80 border-l-4 ${stripeClass}">
+                                                    <td class="py-3 px-3 align-top">
+                                                        <div class="font-extrabold text-slate-900 text-sm font-mono">${minToTimeStr(ev.startMin)} - ${minToTimeStr(ev.endMin)}</div>
+                                                        <div class="inline-block mt-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-semibold">🕒 ${ciStr}</div>
+                                                    </td>
+                                                    <td class="py-3 px-3 align-top">
+                                                        <div class="font-extrabold text-slate-900 text-sm leading-snug">${ev.title}</div>
+                                                        <div class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-bold">📍 ${venueNames}</div>
+                                                    </td>
+                                                    <td class="py-3 px-3 align-top space-y-1.5">
+                                                        ${validRefs.length > 0 ? `
+                                                            <div class="flex flex-wrap gap-1">
+                                                                ${validRefs.map(r => `<span class="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 font-semibold"><span class="text-slate-500">${r.role}：</span>${r.name || '待定'}</span>`).join('')}
+                                                            </div>
+                                                        ` : `<div class="text-slate-400">未指定裁判</div>`}
+                                                        <div class="flex flex-wrap gap-1.5 pt-0.5">
+                                                            ${ev.studentCount > 0 ? `<span class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">🎒 公差學生 *${ev.studentCount}${ev.studentTask ? `（${ev.studentTask}）` : ''}</span>` : ''}
+                                                            ${ev.volunteerCount > 0 ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-bold">🤝 愛心志工 *${ev.volunteerCount}${ev.volunteerTask ? `（${ev.volunteerTask}）` : ''}</span>` : ''}
+                                                        </div>
+                                                    </td>
+                                                    <td class="py-3 px-3 align-top space-y-1 text-[11px] text-slate-600">
+                                                        ${(ev.equipment && ev.equipment.length > 0) ? `<div class="font-semibold text-slate-800">📦 ${ev.equipment.join('、')}</div>` : ''}
+                                                        ${ev.laneNote ? `<div class="text-slate-500 leading-relaxed">📝 ${ev.laneNote}</div>` : ''}
+                                                        ${(!ev.equipment?.length && !ev.laneNote) ? `<span class="text-slate-400">—</span>` : ''}
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `}
+                    </section>
+                `;
+            }).join('');
+        }
+
+        function exportRundownCsv() {
+            const targetDates = state.rundownScope === 'current'
+                ? state.dates.filter(d => d.id === state.currentDateId)
+                : state.dates;
+
+            const rows = [['日期分類', '日期名稱', '主持人/播報', '大會紀錄公告', '場控與志工', '檢錄時間', '正式比賽時段', '場地位置', '比賽項目名稱', '裁判分工明細', '公差學生人數與任務', '志工人數與任務', '器材清單', '道次與備註']];
+
+            targetDates.forEach(d => {
+                const gs = d.generalStaff || { hosts: '', recorders: '', stageControl: '' };
+                const dayEvents = state.events
+                    .filter(e => e.dateId === d.id)
+                    .sort((a, b) => a.startMin - b.startMin);
+
+                dayEvents.forEach(ev => {
+                    const ciOffset = ev.checkInOffsetMin || 0;
+                    const ciStr = ciOffset > 0 ? minToTimeStr(Math.max(START_HOUR * 60, ev.startMin - ciOffset)) : '無';
+                    const venueNames = (ev.venueIds || []).map(vid => state.venues.find(v => v.id === vid)?.name || vid).join('/');
+                    const refStr = (ev.referees || []).filter(r => r.role || r.name).map(r => `${r.role}:${r.name}`).join('；');
+                    const stuStr = ev.studentCount > 0 ? `學生*${ev.studentCount} (${ev.studentTask || ''})` : '';
+                    const volStr = ev.volunteerCount > 0 ? `志工*${ev.volunteerCount} (${ev.volunteerTask || ''})` : '';
+                    const eqStr = (ev.equipment || []).join('、');
+
+                    rows.push([
+                        d.category, d.label, gs.hosts, gs.recorders, gs.stageControl,
+                        ciStr, `${minToTimeStr(ev.startMin)}-${minToTimeStr(ev.endMin)}`,
+                        venueNames, ev.title, refStr, stuStr, volStr, eqStr, ev.laneNote || ''
+                    ]);
+                });
+            });
+
+            const csvContent = '\uFEFF' + rows.map(r => r.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `小學運動會賽務細流表_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('已匯出 Excel (.csv) 細流表檔案！');
+        }
+
+        // ==================== 18. 匯出獨立分享網頁 (含雲端連線設定) & JSON 備份/還原 ====================
+        function exportStandaloneHtml() {
+            const payload = {
+                venues: state.venues,
+                dates: state.dates,
+                events: state.events,
+                currentDateId: state.currentDateId,
+                appMode: 'published',
+                defaultRole: 'teacher',
+                cloudConfig: cloudConfig.dbUrl ? { dbUrl: cloudConfig.dbUrl, projectId: cloudConfig.projectId } : null
+            };
+            const docClone = document.documentElement.cloneNode(true);
+            const embeddedScript = docClone.querySelector('#embedded-state-script');
+            if (embeddedScript) {
+                embeddedScript.textContent = JSON.stringify(payload);
+            }
+            const fullHtml = '<!DOCTYPE html>\n' + docClone.outerHTML;
+            const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `index.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(cloudConfig.dbUrl
+                ? '已匯出 index.html（已內嵌雲端同步！傳上 Netlify 後永久免重新上傳）'
+                : '已匯出正式發布版網頁 (index.html)，可直接上傳 Netlify 或嵌入網站！');
+        }
+
+        function exportJsonData() {
+            const dataStr = JSON.stringify({ venues: state.venues, dates: state.dates, events: state.events }, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `運動會排程備份_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('已匯出 JSON 備份檔');
+        }
+
+        function importJsonData(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const parsed = JSON.parse(evt.target.result);
+                    if (!parsed.dates || !parsed.events) throw new Error('Invalid format');
+                    if (Array.isArray(parsed.venues) && parsed.venues.length > 0) state.venues = parsed.venues;
+                    state.dates = parsed.dates;
+                    state.events = parsed.events.map(normalizeEventData);
+                    state.currentDateId = state.dates[0]?.id || '12-17';
+                    state.selectedEventId = null;
+                    state.personFilter = '';
+                    state.gradeFilter = '';
+                    saveToStorage();
+                    renderVenuesHeader();
+                    renderCommandDeck();
+                    renderDateTree();
+                    renderPersonFilterBar();
+                    renderCanvasGridAndEvents();
+                    renderInspector();
+                    updateCloudSyncUI();
+                    showToast('已成功從 JSON 備份還原所有賽程資料！');
+                } catch (err) {
+                    showToast('JSON 檔案格式不正確，無法匯入');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        }
+
+        // ==================== 19. 工具函式 ====================
+        function minToTimeStr(totalMin) {
+            const h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+
+        function parseTimeStrToMin(str) {
+            if (!str) return null;
+            const match = str.trim().match(/^(\d{1,2}):(\d{2})$/);
+            if (!match) return null;
+            const h = parseInt(match[1], 10);
+            const m = parseInt(match[2], 10);
+            if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+            return h * 60 + m;
+        }
+
+        function generateTimeOptionsHtml(selectedMin, minLimit, maxLimit) {
+            let html = '';
+            for (let m = minLimit; m <= maxLimit; m += STEP_MINUTES) {
+                html += `<option value="${m}" ${m === selectedMin ? 'selected' : ''}>${minToTimeStr(m)}</option>`;
+            }
+            return html;
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            const label = document.getElementById('toastMessage');
+            label.textContent = msg;
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+            }, 3200);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
