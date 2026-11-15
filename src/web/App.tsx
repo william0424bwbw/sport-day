@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { UpdatePrompt } from './components/common/UpdatePrompt';
 import { useIsDesktop } from './hooks/useIsDesktop';
 import { DesktopApp } from './layouts/DesktopApp';
 import { MobileApp } from './layouts/MobileApp';
@@ -13,6 +14,7 @@ export function App() {
     <>
       {isDesktop ? <DesktopApp /> : <MobileApp />}
       <ToastViewport />
+      <UpdatePrompt />
     </>
   );
 }

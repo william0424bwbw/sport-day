@@ -1,0 +1,8 @@
+# Cloudflare Workers 靜態資源的回應標頭（建置時複製到 dist/）
+# sw.js 與 manifest 每次都要重新檢查，新版本才推得出去；/assets/ 的檔名帶雜湊，可以長期快取
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

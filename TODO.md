@@ -85,6 +85,7 @@
 | 備份 D1 | `bash scripts/backup.sh`（輸出到 `backups/`） |
 | 匯入 JSON 備份 | `bash scripts/import-json.sh <檔案.json> [projectId]` |
 | 看線上 log | `npm run tail` |
+| 修改 App 圖示 | 編輯 `public/icon.svg`，執行 `bash scripts/gen-icons.sh` 產生 PNG，再 commit |
 
 ### G. 注意事項
 - [ ] D1 單一欄位上限約 **2 MB**。如果道次表附件用 base64 圖片存在 events 裡，資料會很快變大，之後建議把附件改存到 **R2**，D1 只存網址
@@ -237,7 +238,7 @@ scripts/           *.sh（不變，部署前多一步 npm run build）
 - [x] I6. 手機版排版：今日總覽、賽程列表、單一場地時間軸（觸控拖曳）、底部導覽、全螢幕表單
 - [x] I7. 電腦版排版：時間 × 場地格狀表、拖曳、右側細節面板
 - [x] I8. 輸出功能：細流表（公文 / CSV）、JSON 匯出與匯入、列印樣式、附件（含手機拍照上傳）
-- [ ] I9. PWA 與離線：安裝到桌面、離線瀏覽、新版本提示
+- [x] I9. PWA 與離線：安裝到桌面、離線瀏覽、新版本提示
 - [ ] I10. 切換上線：功能對照表全部完成、端對端測試（桌機 + 手機尺寸）通過、實際用手機演練管理者流程 → 新版直接取代 `/`，刪除 `public/index.html`（舊版保留在 git 歷史中）
 
 **時程與風險**
