@@ -128,10 +128,11 @@ test('管理者拖曳賽程到其他時間與場地，修改會上傳', async ({
   const saved = await eventOf(page, 'ev-1');
   expect(saved?.endMin).toBe(670);
   expect(saved?.venueIds).toEqual(['B']);
-  // 畫面也更新到 B 欄 10:00
+  // 畫面也更新到 B 欄 10:00（拖曳後版面可能位移，重新量格狀表位置）
   const moved = await box(page, 'grid-event-ev-1');
-  expect(Math.round(moved.y - grid.y)).toBe(18 * SLOT + 2);
-  expect(moved.x).toBeGreaterThan(grid.x + colWidth);
+  const gridAfter = await box(page, 'timeline-grid');
+  expect(Math.round(moved.y - gridAfter.y)).toBe(18 * SLOT + 2);
+  expect(moved.x).toBeGreaterThan(gridAfter.x + gridAfter.width / 3);
   // 拖曳後選取該賽程（與舊版相同）
   await expect(page.getByTestId('inspector')).toBeVisible();
 });

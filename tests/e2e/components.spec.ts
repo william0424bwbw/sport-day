@@ -58,8 +58,9 @@ test('複製與刪除（先確認）', async ({ page }) => {
   await detail.getByRole('button', { name: '複製', exact: true }).click();
   await expect.poll(async () => (await events(page)).length, { timeout: 10_000 }).toBe(before + 1);
 
-  // 複製後選取複本；刪除要先確認，取消則不刪
-  await expect(page.getByTestId('event-detail')).toContainText('(複製)');
+  // 複製後選取複本（手機版標題在底部面板的標頭，不在 event-detail 內）；刪除要先確認，取消則不刪
+  const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('event-detail') });
+  await expect(sheet.getByRole('heading', { level: 2 })).toContainText('(複製)');
   await page.getByTestId('event-detail').getByRole('button', { name: '刪除', exact: true }).click();
   const confirm = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: '刪除賽程？' }) });
   await expect(confirm).toBeVisible();

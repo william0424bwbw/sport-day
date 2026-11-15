@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // 端對端測試：同一組測試分別在「桌機」與「手機」尺寸執行
-// 伺服器：Worker（API、獨立的本機 D1，scripts/serve-test.sh）+ Vite 開發伺服器（前端，/api 轉給 Worker）
+// 伺服器：Worker（API、獨立的本機 D1，由 scripts/serve-test.sh 準備）+ Vite 開發伺服器（前端，/api 轉給 Worker）
 // 連接埠可用環境變數調整，讓多組測試同時執行時不互相干擾：
 //   E2E_API_PORT（預設 8798）、E2E_WEB_PORT（預設 5180）
 const API_PORT = Number(process.env.E2E_API_PORT ?? 8798);
@@ -28,9 +28,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'bash scripts/serve-test.sh',
+      // 先由 serve-test.sh 準備獨立的本機 D1，再直接啟動 wrangler dev
+      // （不經過 bash exec，Windows 上 Playwright 才能在結束時關掉它）
+      command:
+        `bash scripts/serve-test.sh && npx --no-install wrangler dev --ip 127.0.0.1 --port ${API_PORT}` +
+        ` --persist-to .wrangler/e2e-state-${API_PORT} --var ADMIN_TOKEN:e2e-admin-token --show-interactive-dev-session=false`,
       url: `http://127.0.0.1:${API_PORT}/api/health`,
-      env: { E2E_API_PORT: String(API_PORT) },
+      env: { E2E_API_PORT: String(API_PORT), WRANGLER_SEND_METRICS: 'false' },
       reuseExistingServer: false,
       timeout: 120_000,
     },
