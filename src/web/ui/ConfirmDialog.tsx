@@ -70,7 +70,7 @@ function ConfirmHost() {
       footer={
         <>
           <Button onClick={() => settle(false)}>{pending?.cancelText ?? '取消'}</Button>
-          <Button data-confirm-okvariant={pending?.danger ? 'danger' : 'primary'} onClick={() => settle(true)}>
+          <Button data-confirm-ok variant={pending?.danger ? 'danger' : 'primary'} onClick={() => settle(true)}>
             {pending?.confirmText ?? '確定'}
           </Button>
         </>
