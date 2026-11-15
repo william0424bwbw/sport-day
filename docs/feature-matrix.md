@@ -23,15 +23,15 @@
 | 14 | 現場即時調度：標記開始／結束、重設、延後後續賽程 `cascadeDelaySubsequentEvents` | ✅ | `LiveControls` + `src/shared/schedule.ts` | 手機上大按鈕 |
 | 15 | 道次表附件：圖片壓縮、PDF、預覽、刪除 | ✅ | `Attachments` | 手機可直接用相機拍照（`capture`）。之後改存 R2（H7） |
 | 16 | 欄位更新輔助：時間、檢錄提早、場地切換／全場地、裁判列、器材預設／自訂、複製、刪除 | ✅ | `EventForm` | |
-| 17 | 細流表：公文格式預覽、CSV 匯出、大會人員編輯、範圍（當日／全部） | ✅ | I8 | 本次（I0–I7）先保留入口 |
+| 17 | 細流表：公文格式預覽、CSV 匯出、大會人員編輯、範圍（當日／全部） | ✅ | `features/Rundown` | 電腦：頂部「輸出細流表」；手機：設定頁。CSV 中以 `=`、`+`、`-`、`@` 開頭的格子前面加 `'`，避免 Excel 當成公式執行 |
 | 18a | 匯出獨立分享網頁 | ❌ | — | 2026-11-14 決定刪除，改由 PWA 提供離線瀏覽 |
-| 18b | JSON 匯出／匯入 | ✅ | I8 | 匯入時用 Zod 檢查格式 |
+| 18b | JSON 匯出／匯入 | ✅ | `features/backup` | 匯入時用 Zod 檢查格式；取代前顯示新舊筆數並要求確認 |
 | 19 | 工具函式：分鐘 ⇄ HH:MM、時間選項、Toast | ✅ | `src/shared/time.ts`、`Toast` | |
 | — | 彈窗 `cloudSyncModal` | 🔧 | `Settings` | 管理者密碼、專案代碼、連線狀態 |
 | — | 彈窗 `venueManagerModal`、`commandSlotModal`、`addDateModal` | ✅ | 對應表單 | 手機為全螢幕表單，電腦為對話框 |
 | — | 彈窗 `attachmentPreviewModal` | ✅ | `AttachmentPreview` | |
-| — | 彈窗 `rundownModal` | ✅ | I8 | |
-| — | 列印樣式 `@media print` | ✅ | I8 | |
+| — | 彈窗 `rundownModal` | ✅ | `RundownPanel` | |
+| — | 列印樣式 `@media print` | ✅ | `index.css`、`#print-root` | 只印細流表；列印期間固定排版（`useIsDesktop`），避免紙張寬度讓畫面切換成手機版、印出空白頁 |
 
 ## 新增功能
 - 手機首頁「進行中／下一項（幾分鐘後檢錄）」

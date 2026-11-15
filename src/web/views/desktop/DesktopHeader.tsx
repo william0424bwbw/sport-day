@@ -1,24 +1,22 @@
 // 電腦版頂部列：標題、同步狀態、角色切換、雲端同步／場地管理／細流表／JSON 匯出匯入
 import { CalendarRange, ClipboardList, Cloud, Download, Eye, FileSpreadsheet, MapPin, SlidersHorizontal, Upload } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Role } from '@shared/types';
 import { SyncBadge } from '../../components/common/SyncBadge';
 import { VenueManager } from '../../components/manage/VenueManager';
 import { SettingsPanel } from '../../components/settings/SettingsPanel';
+import { exportBackup, onImportFileChange } from '../../features/backup';
+import { RundownPanel } from '../../features/Rundown';
 import { useCanEdit } from '../../hooks/useCanEdit';
 import { useSession } from '../../stores/session';
 import { cn } from '../../ui/cn';
 import { Modal } from '../../ui/Modal';
-import { toast } from '../../ui/Toast';
 
 const ROLES: { id: Role; label: string; hint: string; icon: ReactNode }[] = [
   { id: 'admin', label: '管理者', hint: '（編輯）', icon: <SlidersHorizontal className="size-3.5" /> },
   { id: 'staff', label: '工作人員', hint: '（完整細節）', icon: <ClipboardList className="size-3.5" /> },
   { id: 'teacher', label: '導師', hint: '（精簡視角）', icon: <Eye className="size-3.5" /> },
 ];
-
-/** I8 才會完成的功能 */
-const comingSoon = () => toast('即將推出');
 
 const toolBtn = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-colors';
 
@@ -27,7 +25,8 @@ export function DesktopHeader() {
   const setRole = useSession((s) => s.setRole);
   const clearFilter = useSession((s) => s.clearFilter);
   const canEdit = useCanEdit();
-  const [dialog, setDialog] = useState<'settings' | 'venues' | null>(null);
+  const [dialog, setDialog] = useState<'settings' | 'venues' | 'rundown' | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   return (
     <header className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between gap-3 shrink-0 z-30 shadow-sm">
@@ -95,7 +94,7 @@ export function DesktopHeader() {
         {role !== 'teacher' && (
           <button
             type="button"
-            onClick={comingSoon}
+            onClick={() => setDialog('rundown')}
             title="從排程細節生成公文格式細流表"
             className={cn(toolBtn, 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200')}
           >
@@ -105,7 +104,7 @@ export function DesktopHeader() {
         )}
         <button
           type="button"
-          onClick={comingSoon}
+          onClick={exportBackup}
           title="匯出 JSON 備份檔"
           aria-label="匯出 JSON"
           className={cn(toolBtn, 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-transparent font-semibold')}
@@ -116,7 +115,7 @@ export function DesktopHeader() {
         {canEdit && (
           <button
             type="button"
-            onClick={comingSoon}
+            onClick={() => importRef.current?.click()}
             title="匯入 JSON 備份檔還原"
             aria-label="匯入 JSON"
             className={cn(toolBtn, 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-transparent font-semibold')}
@@ -125,10 +124,16 @@ export function DesktopHeader() {
             <span className="hidden xl:inline">匯入 JSON</span>
           </button>
         )}
+        {canEdit && (
+          <input ref={importRef} type="file" accept=".json,application/json" hidden data-testid="import-json-input" onChange={onImportFileChange} />
+        )}
       </div>
 
       <Modal open={dialog === 'settings'} onClose={() => setDialog(null)} title="雲端同步與設定" width="lg">
         <SettingsPanel />
+      </Modal>
+      <Modal open={dialog === 'rundown' && role !== 'teacher'} onClose={() => setDialog(null)} title="賽務工作細流表" width="2xl">
+        <RundownPanel />
       </Modal>
       <Modal open={dialog === 'venues' && canEdit} onClose={() => setDialog(null)} title="管理場地" width="lg">
         <VenueManager />

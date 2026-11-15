@@ -17,7 +17,7 @@ export interface ModalProps {
    */
   variant?: 'sheet' | 'fullscreen';
   /** 電腦版對話框寬度 */
-  width?: 'md' | 'lg' | 'xl';
+  width?: 'md' | 'lg' | 'xl' | '2xl';
 }
 
 /**
@@ -60,7 +60,7 @@ export function Modal({ open, onClose, title, children, footer, variant = 'sheet
           className={cn(
             'bg-white flex flex-col shadow-2xl',
             isDesktop && 'rounded-2xl max-h-[85vh]',
-            isDesktop && { md: 'w-[28rem]', lg: 'w-[36rem]', xl: 'w-[48rem]' }[width],
+            isDesktop && { md: 'w-[28rem]', lg: 'w-[36rem]', xl: 'w-[48rem]', '2xl': 'w-[min(64rem,94vw)]' }[width],
             mobileSheet && 'rounded-t-2xl max-h-[88dvh] w-full pb-safe',
             mobileFull && 'h-dvh w-full pt-safe pb-safe',
           )}
