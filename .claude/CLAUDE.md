@@ -15,11 +15,13 @@
 - 部署和維護都用腳本或 CI，不要指示使用者到 Cloudflare Dashboard 手動上傳。
 
 ## 架構
-- `public/index.html`：整個前端。資料以 D1 為準，localStorage 只當離線快取。
-- `src/worker.js`：API 路由與權限；`src/db.js`：JSON ⇄ 資料表的讀寫。
+- 前端：React + Vite + TypeScript，`src/web/`（`layouts/` 手機／電腦排版、`views/`、`components/`、`features/` 細流表與匯出入、`stores/` Zustand、`services/` 同步）。建置到 `dist/` 由 Worker 提供；PWA（`vite-plugin-pwa`）。資料以 D1 為準，localStorage 只當離線快取。
+- `src/shared/`：前端與 Worker 共用的型別、Zod schema、排程邏輯（純函式）。
+- `src/worker/`：`index.ts` API 路由與權限；`db.ts` JSON ⇄ 資料表的讀寫；`project-room.ts` Durable Object（WebSocket 即時推送）。
+- 舊版單檔前端只保留在 `legacy/index.html` 當參考，不再部署。功能對照見 `docs/feature-matrix.md`。
 - D1 資料表：`venues`、`days`、`command_slots`、`events`、`event_venues`、`event_referees`、`event_equipment`、`event_attachments`，以及 view `v_schedule`、`v_integrity_issues`。
 - API 對前端仍是同一份 JSON（`{ venues, dates, events }`）。資料表沒有對應欄位的屬性會存進 `extra`。
-- **新增欄位時**：新增 migration 加欄位，同時修改 `src/db.js` 的 `WRITE_SQL`（含 `json_remove` 清單）與 `readProject`，再執行測試。
+- **新增欄位時**：新增 migration 加欄位，同時修改 `src/worker/db.ts` 的 `WRITE_SQL`（含 `json_remove` 清單）與 `readProject`，再執行測試。
 
 ## 常用指令
 - 本機開發：`npm run dev`
