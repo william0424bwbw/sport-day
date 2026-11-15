@@ -11,7 +11,8 @@ export function fixture() {
 }
 
 /** 透過 API 寫入專案資料（經由 Vite 的 /api 轉送到測試用 Worker） */
-export async function seedProject(page: Page, data: unknown = fixture(), projectId = PROJECT_ID) {
+// 預設帶空的 settings：沒帶 settings 時伺服器會保留原值，測試之間會互相影響
+export async function seedProject(page: Page, data: unknown = { ...fixture(), settings: {} }, projectId = PROJECT_ID) {
   const res = await page.request.put(`/api/projects/${projectId}`, {
     headers: { Authorization: `Bearer ${ADMIN_TOKEN}`, 'Content-Type': 'application/json' },
     data,

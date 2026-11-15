@@ -2,7 +2,7 @@
 // 實作：src/web/stores/project.ts、session.ts，同步：src/web/services/*
 
 import type { GradeId } from '@shared/constants';
-import type { CommandSlot, Day, ProjectData, Role, ScheduleEvent, Venue } from '@shared/types';
+import type { CommandSlot, Day, ProjectData, ProjectSettings, Role, ScheduleEvent, Venue } from '@shared/types';
 
 /** 雲端連線狀態 */
 export type ConnectionState =
@@ -29,6 +29,9 @@ export interface SyncStatus {
 export interface ProjectStore extends ProjectData {
   /** 是否已載入過資料（雲端或本機快取） */
   loaded: boolean;
+
+  // ---- 專案設定（聯絡窗口等） ----
+  updateSettings(patch: Partial<ProjectSettings>): void;
 
   // ---- 賽程 ----
   addEvent(init: Partial<ScheduleEvent> & { dateId: string; venueIds: string[]; startMin: number }): string;

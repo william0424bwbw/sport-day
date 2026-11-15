@@ -66,7 +66,11 @@ export const useProject = create<ProjectStore>((set, get) => {
     venues: [],
     dates: [],
     events: [],
+    settings: {},
     loaded: false,
+
+    // ---- 專案設定 ----
+    updateSettings: (patch) => commit({ settings: { ...get().settings, ...patch } }),
 
     // ---- 賽程 ----
     addEvent: (init) => {
@@ -185,6 +189,7 @@ export const useProject = create<ProjectStore>((set, get) => {
         venues,
         dates: (Array.isArray(data.dates) ? data.dates : []).map((d) => normalizeDay(d)),
         events: (Array.isArray(data.events) ? data.events : []).map((e) => normalizeEvent(e, fallbackVenue)),
+        settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
       };
       set({ ...next, loaded: true });
       fixSessionRefs(next);
@@ -195,6 +200,6 @@ export const useProject = create<ProjectStore>((set, get) => {
 
 /** 目前的賽程資料（不含 actions），上傳與快取用 */
 export function projectSnapshot(): ProjectData {
-  const { venues, dates, events } = useProject.getState();
-  return { venues, dates, events };
+  const { venues, dates, events, settings } = useProject.getState();
+  return { venues, dates, events, settings: settings ?? {} };
 }

@@ -79,6 +79,8 @@ export function loadCache(projectId: string): CachedProject | null {
     venues: Array.isArray(c.venues) ? c.venues : [],
     dates: Array.isArray(c.dates) ? c.dates : [],
     events: c.events,
+    // 聯絡窗口等專案設定也要快取，否則離線或版本相同時會顯示不出來
+    settings: c.settings && typeof c.settings === 'object' && !Array.isArray(c.settings) ? c.settings : {},
     updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : null,
     pending: c.pending === true,
   };

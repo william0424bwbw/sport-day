@@ -51,6 +51,21 @@ export async function runApiTests({ base, token, snapshotFile }) {
   const diff2 = firstDiff(canonical(edited), canonical(back2));
   t.check('第二次 PUT 完整取代舊資料、順序正確', !diff2, diff2 || '');
 
+  // 專案設定（聯絡窗口）：有帶就寫入；沒帶 settings（舊版裝置）時保留原值；帶空物件則清除
+  const withSettings = { ...structuredClone(fixture), settings: { contact: '體育組 楊合萍老師', note: '其他設定' } };
+  await put('t-settings', withSettings);
+  const s1 = await get('t-settings');
+  t.check('settings 寫入後讀回相同（含 extra）', !firstDiff(canonical(withSettings), canonical(s1)), firstDiff(canonical(withSettings), canonical(s1)) || '');
+  await put('t-settings', fixture);
+  const s2 = await get('t-settings');
+  t.check('PUT 沒帶 settings 時保留原本的聯絡窗口', s2.settings?.contact === '體育組 楊合萍老師' && s2.settings?.note === '其他設定',
+    JSON.stringify(s2.settings));
+  await put('t-settings', { ...fixture, settings: {} });
+  const s3 = await get('t-settings');
+  t.check('PUT 帶空的 settings 時清除設定', s3.settings === undefined, JSON.stringify(s3.settings));
+  const tooLong = await put('t-settings', { ...fixture, settings: { contact: 'x'.repeat(201) } });
+  t.check('聯絡窗口超過 200 字 → 400', tooLong.status === 400);
+
   // 不同專案互不影響
   await put('t-other', { venues: [], dates: [], events: [{ id: 'only', title: '另一個專案' }] });
   const stillEdited = await get('t-fixture');

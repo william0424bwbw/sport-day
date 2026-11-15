@@ -1,5 +1,5 @@
 // I5：設定（角色切換、管理者密碼、專案代碼、同步狀態、模擬時間）
-import { Clock, KeyRound, Minus, Plus, RefreshCw, UserRound } from 'lucide-react';
+import { Clock, KeyRound, Minus, Phone, Plus, RefreshCw, UserRound } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { DAY_END_MIN, DAY_START_MIN } from '@shared/constants';
 import { minToTime } from '@shared/time';
@@ -7,6 +7,7 @@ import type { Role } from '@shared/types';
 import { useCanEdit } from '../../hooks/useCanEdit';
 import { useNowMin } from '../../hooks/useNowMin';
 import { PROJECT_ID_RE } from '../../services/api';
+import { useProject } from '../../stores/project';
 import { useSession } from '../../stores/session';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
@@ -15,9 +16,9 @@ import { TextField, Toggle } from '../../ui/Field';
 import { toast } from '../../ui/Toast';
 import { CONNECTION_DOT, CONNECTION_LABEL, ROLE_OPTIONS, formatVersion } from '../common/labels';
 
-function Card({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+function Card({ title, icon, children, testId }: { title: string; icon: ReactNode; children: ReactNode; testId?: string }) {
   return (
-    <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+    <section data-testid={testId} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
       <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
         {icon}
         {title}
@@ -214,6 +215,67 @@ export interface SettingsPanelProps {
   className?: string;
 }
 
+/** 聯絡窗口：所有人都看得到；管理者（已驗證）可以修改，存到雲端後所有裝置同步 */
+function ContactCard() {
+  const canEdit = useCanEdit();
+  const contact = useProject((s) => s.settings?.contact ?? '');
+  const [value, setValue] = useState(contact);
+  const [editing, setEditing] = useState(false);
+
+  if (!canEdit && !contact.trim()) return null;
+
+  const save = () => {
+    useProject.getState().updateSettings({ contact: value.trim() });
+    setEditing(false);
+    toast('已更新聯絡窗口', 'success');
+  };
+
+  return (
+    <Card title="聯絡窗口" testId="contact-card" icon={<Phone className="size-5 text-blue-600" aria-hidden />}>
+      {canEdit && editing ? (
+        <div className="space-y-2">
+          <TextField
+            label="有問題請聯絡"
+            value={value}
+            maxLength={200}
+            placeholder="例如：體育組 王老師（分機 123）"
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && save()}
+          />
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setEditing(false)}>取消</Button>
+            <Button variant="primary" onClick={save} disabled={value.trim() === contact.trim()}>
+              儲存
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <p className="min-w-0 flex-1 text-sm text-slate-700 break-words" data-testid="contact-text">
+            {contact.trim() ? (
+              <>
+                有問題請聯絡：<strong className="text-slate-900">{contact}</strong>
+              </>
+            ) : (
+              <span className="text-slate-400">尚未設定。設定後，所有老師都會在這裡看到。</span>
+            )}
+          </p>
+          {canEdit && (
+            <Button
+              onClick={() => {
+                setValue(contact);
+                setEditing(true);
+              }}
+            >
+              修改
+            </Button>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsPanel({ className }: SettingsPanelProps) {
   const role = useSession((s) => s.role);
 
@@ -225,6 +287,7 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
 
   return (
     <div className={cn('space-y-4', className)}>
+      <ContactCard />
       <Card title="角色" icon={<UserRound className="size-5 text-blue-600" aria-hidden />}>
         <Segmented label="角色" value={role} options={ROLE_OPTIONS} onChange={changeRole} />
         <p className="text-xs text-slate-500">

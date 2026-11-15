@@ -117,7 +117,7 @@ export const backupFileName = (date?: Date) => `運動會排程備份_${dateStam
 
 /** JSON 備份內容（與 API 相同的 { venues, dates, events }） */
 export function toBackupJson(data: ProjectData): string {
-  return JSON.stringify({ venues: data.venues, dates: data.dates, events: data.events }, null, 2);
+  return JSON.stringify({ settings: data.settings ?? {}, venues: data.venues, dates: data.dates, events: data.events }, null, 2);
 }
 
 export type ImportResult = { ok: true; data: ProjectData } | { ok: false; error: string };

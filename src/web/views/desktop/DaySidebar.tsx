@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { DayPicker } from '../../components/common/DayPicker';
 import { DayManager } from '../../components/manage/DayManager';
 import { useCanEdit } from '../../hooks/useCanEdit';
+import { useProject } from '../../stores/project';
 import { useSession } from '../../stores/session';
 import { cn } from '../../ui/cn';
 import { Modal } from '../../ui/Modal';
@@ -29,6 +30,7 @@ const ROLE_HINTS = {
 export function DaySidebar() {
   const role = useSession((s) => s.role);
   const adminVerified = useSession((s) => s.sync.adminVerified);
+  const contact = useProject((s) => s.settings?.contact ?? '');
   const canEdit = useCanEdit();
   const [managing, setManaging] = useState(false);
   const hint = ROLE_HINTS[role];
@@ -61,6 +63,11 @@ export function DaySidebar() {
           <br />
           {role === 'admin' && !adminVerified ? '尚未驗證管理者密碼，請到「雲端同步」輸入密碼後才能編輯。' : hint.body}
         </div>
+        {contact.trim() && (
+          <p className="mt-2 px-1 text-[11px] leading-relaxed text-slate-500 break-words" data-testid="sidebar-contact">
+            有問題請聯絡：<strong className="text-slate-700">{contact}</strong>
+          </p>
+        )}
       </div>
 
       <Modal open={managing && canEdit} onClose={() => setManaging(false)} title="管理比賽日" width="lg">

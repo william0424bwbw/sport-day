@@ -16,14 +16,22 @@ export interface ProjectRecord {
   venues: JsonObject[];
   dates: JsonObject[];
   events: JsonObject[];
+  settings?: JsonObject;
   updatedAt: number;
 }
 
 // ---------- 寫入 ----------
 // ?1 = projectId，?2 = 整份 JSON 字串
 const WRITE_SQL = [
-  `INSERT INTO projects (id, updated_at) VALUES (?1, ?3)
-   ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at`,
+  // settings（聯絡窗口等）：PUT 內容沒有 settings 時保留原值，
+  // 避免還在用舊版快取的裝置存檔時把管理者設定清空
+  `INSERT INTO projects (id, updated_at, contact, settings_extra)
+   VALUES (?1, ?3, json_extract(?2, '$.settings.contact'),
+           NULLIF(json_remove(json_extract(?2, '$.settings'), '$.contact'), '{}'))
+   ON CONFLICT(id) DO UPDATE SET
+     updated_at = excluded.updated_at,
+     contact = CASE WHEN json_type(?2, '$.settings') = 'object' THEN excluded.contact ELSE projects.contact END,
+     settings_extra = CASE WHEN json_type(?2, '$.settings') = 'object' THEN excluded.settings_extra ELSE projects.settings_extra END`,
 
   // 先清掉這個專案的舊資料（子表先刪，不依賴外鍵 CASCADE）
   `DELETE FROM event_venues      WHERE project_id = ?1`,
@@ -112,6 +120,7 @@ export async function writeProject(db: D1Database, projectId: string, body: Proj
     venues: body.venues ?? [],
     dates: body.dates ?? [],
     events: body.events,
+    ...(body.settings ? { settings: body.settings } : {}),
   });
   const args: (string | number)[] = [projectId, payload, updatedAt];
   // batch = 單一交易：任何一條失敗就整批回復
@@ -127,7 +136,7 @@ function maxParam(sql: string): number {
 // ---------- 讀取 ----------
 type Cell = string | number | null;
 
-interface ProjectRow { updated_at: number }
+interface ProjectRow { updated_at: number; contact: Cell; settings_extra: string | null }
 interface VenueRow { id: string; name: Cell; subtitle: Cell; extra: string | null }
 interface DayRow {
   id: string; label: Cell; category: Cell; command_deck_enabled: Cell;
@@ -149,7 +158,7 @@ interface EquipmentRow { event_id: string; item: Cell }
 interface AttachmentRow { event_id: string; name: Cell; type: Cell; data_url: Cell; extra: string | null }
 
 const READ_SQL = [
-  `SELECT updated_at FROM projects WHERE id = ?1`,
+  `SELECT updated_at, contact, settings_extra FROM projects WHERE id = ?1`,
   `SELECT * FROM venues            WHERE project_id = ?1 ORDER BY sort_order`,
   `SELECT * FROM days              WHERE project_id = ?1 ORDER BY sort_order`,
   `SELECT * FROM command_slots     WHERE project_id = ?1 ORDER BY sort_order`,
@@ -234,6 +243,12 @@ export async function readProject(db: D1Database, projectId: string): Promise<Pr
       actualStartMin: e.actual_start_min,
       actualEndMin: e.actual_end_min,
     }, e.extra)),
+
+    // 沒有任何設定時不輸出 settings（與原本 JSON「沒有這個屬性」一致）
+    ...(() => {
+      const settings = build({ contact: project[0].contact }, project[0].settings_extra);
+      return Object.keys(settings).length ? { settings } : {};
+    })(),
 
     updatedAt: project[0].updated_at,
   };

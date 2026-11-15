@@ -81,11 +81,20 @@ export interface ScheduleEvent {
   [extra: string]: unknown;
 }
 
+/** 專案設定（管理者在「設定」頁修改，所有人都看得到） */
+export interface ProjectSettings {
+  /** 聯絡窗口，例如「體育組 楊合萍老師」 */
+  contact?: string;
+  [extra: string]: unknown;
+}
+
 /** 一場運動會的完整資料 */
 export interface ProjectData {
   venues: Venue[];
   dates: Day[];
   events: ScheduleEvent[];
+  /** 沒有設定過時可能不存在 */
+  settings?: ProjectSettings;
 }
 
 /** GET /api/projects/:id 的回應（不存在時為 null） */

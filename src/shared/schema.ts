@@ -80,8 +80,14 @@ function uniqueIds<T extends { id: string }>(label: string) {
   };
 }
 
+/** 專案設定（管理者在「設定」頁修改） */
+export const projectSettingsSchema = z.looseObject({
+  contact: z.string().max(200).optional(),
+});
+
 export const projectDataSchema = z
   .looseObject({
+    settings: projectSettingsSchema.optional(),
     venues: z.array(venueSchema).default([]).superRefine(uniqueIds('venues')),
     dates: z.array(daySchema).default([]).superRefine(uniqueIds('dates')),
     events: z.array(eventSchema).superRefine(uniqueIds('events')),

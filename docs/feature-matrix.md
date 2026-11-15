@@ -37,3 +37,4 @@
 - 手機首頁「進行中／下一項（幾分鐘後檢錄）」
 - Durable Object 即時推送（取代 4 秒輪詢）
 - 離線瀏覽（PWA，I9）
+- 聯絡窗口（專案設定 `settings.contact`）：管理者在「設定」修改，所有人在設定頁看得到，電腦版左欄也顯示；資料表 `projects.contact`（migration 0005）。PUT 沒帶 `settings` 時保留原值，避免舊版快取的裝置把設定清空

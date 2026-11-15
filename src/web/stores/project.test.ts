@@ -189,4 +189,18 @@ describe('project store', () => {
     expect(useProject.getState().dates[0].label).toBe('Day 1');
     expect(changes).toHaveBeenCalledTimes(3);
   });
+
+  it('updateSettings：合併設定、通知同步；replaceAll 讀入或清空設定；snapshot 一定帶 settings', async () => {
+    const { useProject, changes } = await load();
+    const { projectSnapshot } = await import('./project');
+    expect(projectSnapshot().settings).toEqual({});
+    useProject.getState().updateSettings({ contact: '體育組 楊合萍老師' });
+    expect(useProject.getState().settings).toEqual({ contact: '體育組 楊合萍老師' });
+    expect(projectSnapshot().settings?.contact).toBe('體育組 楊合萍老師');
+    expect(changes).toHaveBeenCalledTimes(1);
+    useProject.getState().replaceAll({ venues: [], dates: [], events: [], settings: { contact: '雲端的值' } }, 'remote');
+    expect(useProject.getState().settings?.contact).toBe('雲端的值');
+    useProject.getState().replaceAll({ venues: [], dates: [], events: [] }, 'remote');
+    expect(useProject.getState().settings).toEqual({});
+  });
 });

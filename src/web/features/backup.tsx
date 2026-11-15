@@ -44,7 +44,9 @@ export async function importBackup(file: File): Promise<boolean> {
     danger: true,
   });
   if (!ok) return false;
-  useProject.getState().replaceAll(result.data, 'local');
+  // 舊的備份檔沒有 settings：保留目前的聯絡窗口等設定，不要清空
+  const settings = result.data.settings ?? projectSnapshot().settings;
+  useProject.getState().replaceAll({ ...result.data, settings }, 'local');
   const session = useSession.getState();
   session.selectEvent(null);
   session.clearFilter();

@@ -63,7 +63,7 @@ export async function fetchVersion(id: string): Promise<number | null> {
 
 /** 上傳整份賽程（需要管理者密碼），回傳新的版本號 */
 export async function putProject(id: string, data: ProjectData, token: string): Promise<number> {
-  const body: ProjectData = { venues: data.venues, dates: data.dates, events: data.events };
+  const body: ProjectData = { venues: data.venues, dates: data.dates, events: data.events, settings: data.settings ?? {} };
   const res = await request<{ updatedAt: number }>(projectPath(id), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
